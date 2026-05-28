@@ -32,10 +32,10 @@ release/
 
 ## CLI
 
-Interactive prompt:
+Interactive prompt from the released macOS package:
 
 ```bash
-./dist/datadigitizer interactive
+/Users/aakashsjoshi/Downloads/DataDigitizer-2.11.mac/datadigitizer
 ```
 
 Or from source:
@@ -50,12 +50,22 @@ One-line mode:
 ./dist/datadigitizer cli \
   --pic-dir /path/to/plot.png \
   --color 255,0,0 \
-  --ticks "[10,90],[190,90],[10,90],[10,10]" \
+  --tick-setting "[10,90],[190,90],[10,90],[10,10]" \
   --axis-values 0,10,0,100 \
   --output-dir /path/to/output
 ```
 
-Leave `--color`, `--ticks`, and `--axis-values` blank or pass `null` to use the automatic paths.
+You can also supply axis bounds separately:
+
+```bash
+./dist/datadigitizer \
+  --pic-dir /path/to/plot.png \
+  --color 255,0,0 \
+  --tick-setting "[10,90],[190,90],[10,90],[10,10]" \
+  --xmin 0 --xmax 10 --ymin 0 --ymax 100
+```
+
+Leave `--color`, `--ticks` / `--tick-setting`, and `--axis-values` blank or pass `null` to use the automatic paths. Outputs are a CSV of digitized data points and an overlapping plot PNG in `--output-dir`, or beside the input image when `--output-dir` is blank.
 
 ## GitHub Release Build
 

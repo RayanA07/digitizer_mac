@@ -22,7 +22,7 @@ hiddenimports = [
 ]
 
 a = Analysis(
-    [str(root / "digitizer_2_11.py")],
+    [str(root / "datadigitizer_cli_entry.py")],
     pathex=[str(root)],
     binaries=[],
     datas=datas,

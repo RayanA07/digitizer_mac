@@ -18,12 +18,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not pic_path:
         parser.error("provide an image path as a positional argument or with --pic-dir")
 
+    axis_values = args.axis_values
+    manual_axis_values = [args.xmin, args.xmax, args.ymin, args.ymax]
+    if axis_values and any(value is not None for value in manual_axis_values):
+        parser.error("use either --axis-values or --xmin --xmax --ymin --ymax, not both")
+    if not axis_values and any(value is not None for value in manual_axis_values):
+        if not all(value is not None for value in manual_axis_values):
+            parser.error("--xmin, --xmax, --ymin, and --ymax must be supplied together")
+        axis_values = ",".join(str(value) for value in manual_axis_values)
+
     try:
         result = digitize_image(
             pic_dir=pic_path,
             color_rgb=parse_rgb(args.color),
             tick_points=parse_points(args.ticks),
-            axis_values=parse_numbers(args.axis_values, expected=4, name="axis-values"),
+            axis_values=parse_numbers(axis_values, expected=4, name="axis-values"),
             output_dir=args.output_dir,
             normalize_y=args.normalize_y,
             limit_to_calibration=args.limit_to_calibration,
@@ -39,7 +48,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(result.to_json())
     else:
         print(f"CSV: {result.csv_path}")
-        print(f"Overlay: {result.overlay_path}")
+        print(f"Overlapping plot: {result.overlay_path}")
         print(f"Points: {result.point_count}")
         print(f"Color RGB: {result.color_rgb}")
         print(f"Used OCR: {result.used_ocr}")
@@ -95,7 +104,7 @@ def interactive_main() -> int:
         print()
         print("Done.")
         print(f"CSV: {result.csv_path}")
-        print(f"Overlay: {result.overlay_path}")
+        print(f"Overlapping plot: {result.overlay_path}")
         print(f"Points: {result.point_count}")
         print(f"Color RGB: {result.color_rgb}")
         print(f"Used OCR: {result.used_ocr}")
@@ -104,7 +113,7 @@ def interactive_main() -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="DataDigitizer-2.11 cli",
+        prog="datadigitizer",
         description="Digitize an image from the terminal using the existing Data Digitizer algorithms.",
     )
     parser.add_argument("pic_path", nargs="?", help="Path to the image file.")
@@ -115,12 +124,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--ticks",
+        "--tick-setting",
+        "--tick-coordinates",
+        dest="ticks",
         help="Four pixel points in x_min,x_max,y_min,y_max order, e.g. '[10,200],[500,200],[10,200],[10,20]'.",
     )
     parser.add_argument(
         "--axis-values",
         help="Axis values as 'xmin,xmax,ymin,ymax'. If omitted, OCR axis detection is used.",
     )
+    parser.add_argument("--xmin", help="X-axis minimum value. Use with --xmax --ymin --ymax.")
+    parser.add_argument("--xmax", help="X-axis maximum value. Use with --xmin --ymin --ymax.")
+    parser.add_argument("--ymin", help="Y-axis minimum value. Use with --xmin --xmax --ymax.")
+    parser.add_argument("--ymax", help="Y-axis maximum value. Use with --xmin --xmax --ymin.")
     parser.add_argument("--output-dir", help="Output directory. Defaults to the image directory.")
     parser.add_argument("--normalize-y", action="store_true", help="Add a y_norm column to the CSV.")
     parser.add_argument(
