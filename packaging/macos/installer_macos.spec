@@ -7,11 +7,7 @@ block_cipher = None
 spec_dir = Path(SPECPATH)
 root = spec_dir.parents[1]
 
-datas = [
-    (str(root / "dist" / "Digitizer.app"), "payload/Digitizer.app"),
-    (str(root / "dist" / "AccuracyTester.app"), "payload/AccuracyTester.app"),
-    (str(root / "dist" / "datadigitizer"), "payload"),
-]
+datas = []
 
 a = Analysis(
     [str(root / "macos_installer.py")],

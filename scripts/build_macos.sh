@@ -18,6 +18,14 @@ python -m PyInstaller --clean --noconfirm packaging/macos/installer_macos.spec
 codesign --force --deep --sign - "dist/Digitizer.app" || true
 codesign --force --deep --sign - "dist/AccuracyTester.app" || true
 codesign --force --sign - "dist/datadigitizer" || true
+
+INSTALLER_PAYLOAD="dist/DataDigitizer Installer.app/Contents/Frameworks/payload"
+rm -rf "$INSTALLER_PAYLOAD"
+mkdir -p "$INSTALLER_PAYLOAD"
+cp -R "dist/Digitizer.app" "$INSTALLER_PAYLOAD/"
+cp -R "dist/AccuracyTester.app" "$INSTALLER_PAYLOAD/"
+cp "dist/datadigitizer" "$INSTALLER_PAYLOAD/"
+
 codesign --force --deep --sign - "dist/DataDigitizer Installer.app" || true
 
 mkdir -p release

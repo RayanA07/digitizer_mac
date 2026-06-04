@@ -41,19 +41,34 @@ def resource_root() -> Path:
     return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 
 
-def payload_root() -> Path:
-    return resource_root() / "payload"
+def payload_roots() -> list[Path]:
+    roots = [resource_root() / "payload"]
+    executable = Path(sys.executable).resolve()
+    for parent in executable.parents:
+        roots.append(parent / "payload")
+        if parent.name == "Contents":
+            roots.append(parent / "Frameworks" / "payload")
+            roots.append(parent / "Resources" / "payload")
+            break
+    roots.append(Path(__file__).resolve().parent / "payload")
+    seen: set[Path] = set()
+    unique_roots: list[Path] = []
+    for root in roots:
+        if root not in seen:
+            unique_roots.append(root)
+            seen.add(root)
+    return unique_roots
 
 
 def resolve_payload(name: str) -> Path | None:
-    root = payload_root()
-    direct = root / name
-    if direct.exists():
-        return direct
-    if root.exists():
-        for candidate in root.rglob(name):
-            if candidate.exists():
-                return candidate
+    for root in payload_roots():
+        direct = root / name
+        if direct.exists():
+            return direct
+        if root.exists():
+            for candidate in root.rglob(name):
+                if candidate.exists():
+                    return candidate
     return None
 
 
