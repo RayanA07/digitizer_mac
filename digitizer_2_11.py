@@ -93,27 +93,36 @@ def print_help() -> None:
                 "Data Digitizer 2.11.mac",
                 "",
                 "Double-click or run with no arguments:",
-                "  DataDigitizer-2.11.exe",
+                "  Digitizer.app",
                 "",
                 "Run CLI digitization:",
-                "  DataDigitizer-2.11.exe cli --pic-dir plot.png --color 255,0,0 --ticks \"[10,200],[500,200],[10,200],[10,20]\" --axis-values 0,10,0,100",
+                "  datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", output_dir=\"/Users/yourname/Downloads/testcli\")'",
                 "",
-                "Run interactive CLI wizard:",
-                "  DataDigitizer-2.11.exe interactive",
+                "Run CLI with manual color, ticks, and axis values:",
+                "  datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/yourname/Downloads/testcli\")'",
                 "",
                 "Show CLI options:",
-                "  DataDigitizer-2.11.exe cli --help",
+                "  datadigitizer cli --help",
             ]
         )
     )
 
 
 def _looks_like_cli_invocation(args: list[str]) -> bool:
+    joined = " ".join(args).strip()
+    if joined.startswith("digitizer_cli("):
+        return True
     cli_flags = {
         "--pic-dir",
         "--color",
         "--ticks",
+        "--tick-setting",
+        "--tick-coordinates",
         "--axis-values",
+        "--xmin",
+        "--xmax",
+        "--ymin",
+        "--ymax",
         "--output-dir",
         "--normalize-y",
         "--limit-to-calibration",

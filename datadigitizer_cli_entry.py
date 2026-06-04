@@ -14,7 +14,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
 
     if not args:
-        return interactive_main()
+        print_help()
+        return 0
 
     command = args[0].lower()
     if command in {"interactive", "wizard", "menu"}:
@@ -36,17 +37,20 @@ def print_help() -> None:
             [
                 "Data Digitizer 2.11.mac CLI",
                 "",
-                "Interactive menu:",
-                "  /Users/aakashsjoshi/Downloads/DataDigitizer-2.11.mac/datadigitizer",
-                "",
                 "One-line digitization:",
-                "  /Users/aakashsjoshi/Downloads/DataDigitizer-2.11.mac/datadigitizer --pic-dir /path/to/plot.png --color 255,0,0 --tick-setting \"[10,200],[500,200],[10,200],[10,20]\" --axis-values 0,10,0,100",
+                "  /Users/yourname/Applications/Data Digitizer/datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", output_dir=\"/Users/yourname/Downloads/testcli\")'",
                 "",
-                "Auto color, OCR ticks, and OCR axis values:",
-                "  /Users/aakashsjoshi/Downloads/DataDigitizer-2.11.mac/datadigitizer --pic-dir /path/to/plot.png",
+                "Auto color, OCR ticks, OCR axis values:",
+                "  /Users/yourname/Applications/Data Digitizer/datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", , , , output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "",
+                "Full manual inputs:",
+                "  /Users/yourname/Applications/Data Digitizer/datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "",
+                "Interactive menu fallback:",
+                "  /Users/yourname/Applications/Data Digitizer/datadigitizer interactive",
                 "",
                 "Full option help:",
-                "  /Users/aakashsjoshi/Downloads/DataDigitizer-2.11.mac/datadigitizer cli --help",
+                "  /Users/yourname/Applications/Data Digitizer/datadigitizer cli --help",
             ]
         )
     )

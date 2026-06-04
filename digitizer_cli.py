@@ -1,18 +1,52 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
-from digitizer_api import DigitizerCliError, digitize_image
+from digitizer_api import DigitizerCliError, DigitizerOutputs, digitize_image
+
+
+CALL_NAME = "digitizer_cli"
+CALL_SLOT_NAMES = ("pic_dir", "color", "tick_setting", "axis_values", "output_dir")
+
+
+def digitizer_cli(
+    pic_dir: str | Path,
+    color: object = None,
+    tick_setting: object = None,
+    axis_values: object = None,
+    output_dir: str | Path | None = None,
+    normalize_y: bool = False,
+    limit_to_calibration: bool = True,
+) -> DigitizerOutputs:
+    """Function-style wrapper for one-line CLI/API use."""
+
+    if _is_null_value(pic_dir):
+        raise DigitizerCliError("pic_dir is required.")
+
+    return digitize_image(
+        pic_dir=_clean_path_object(pic_dir),
+        color_rgb=_coerce_rgb(color),
+        tick_points=_coerce_points(tick_setting),
+        axis_values=_coerce_axis_values(axis_values),
+        output_dir=None if _is_null_value(output_dir) else _clean_path_object(output_dir),
+        normalize_y=bool(normalize_y),
+        limit_to_calibration=bool(limit_to_calibration),
+    )
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    if is_function_call_syntax(raw_args):
+        return _run_function_call(raw_args)
+
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_args)
 
     pic_path = args.pic_dir_option or args.pic_path
     if not pic_path:
@@ -28,11 +62,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         axis_values = ",".join(str(value) for value in manual_axis_values)
 
     try:
-        result = digitize_image(
+        result = digitizer_cli(
             pic_dir=pic_path,
-            color_rgb=parse_rgb(args.color),
-            tick_points=parse_points(args.ticks),
-            axis_values=parse_numbers(axis_values, expected=4, name="axis-values"),
+            color=args.color,
+            tick_setting=args.ticks,
+            axis_values=axis_values,
             output_dir=args.output_dir,
             normalize_y=args.normalize_y,
             limit_to_calibration=args.limit_to_calibration,
@@ -47,11 +81,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.json:
         print(result.to_json())
     else:
-        print(f"CSV: {result.csv_path}")
-        print(f"Overlapping plot: {result.overlay_path}")
-        print(f"Points: {result.point_count}")
-        print(f"Color RGB: {result.color_rgb}")
-        print(f"Used OCR: {result.used_ocr}")
+        _print_standard_result(result)
     return 0
 
 
@@ -81,11 +111,11 @@ def interactive_main() -> int:
             continue
 
         try:
-            result = digitize_image(
+            result = digitizer_cli(
                 pic_dir=values["pic_dir"],
-                color_rgb=parse_rgb(values["color"]),
-                tick_points=parse_points(values["ticks"]),
-                axis_values=parse_numbers(values["axis_values"], expected=4, name="axis-values"),
+                color=values["color"],
+                tick_setting=values["ticks"],
+                axis_values=values["axis_values"],
                 output_dir=values["output_dir"],
                 normalize_y=values["normalize_y"],
                 limit_to_calibration=values["limit_to_calibration"],
@@ -103,11 +133,7 @@ def interactive_main() -> int:
 
         print()
         print("Done.")
-        print(f"CSV: {result.csv_path}")
-        print(f"Overlapping plot: {result.overlay_path}")
-        print(f"Points: {result.point_count}")
-        print(f"Color RGB: {result.color_rgb}")
-        print(f"Used OCR: {result.used_ocr}")
+        _print_standard_result(result)
         return 0
 
 
@@ -115,6 +141,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="datadigitizer",
         description="Digitize an image from the terminal using the existing Data Digitizer algorithms.",
+        epilog=(
+            "Function-call mode:\n"
+            "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", output_dir=\"/Users/yourname/Downloads/testcli\")'\n"
+            "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", , ([10,200],[500,200],[10,200],[10,20]), (0,10,0,100), output_dir=\"/Users/yourname/Downloads/testcli\")'"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("pic_path", nargs="?", help="Path to the image file.")
     parser.add_argument("--pic-dir", dest="pic_dir_option", help="Path to the image file.")
@@ -154,6 +186,284 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--json", action="store_true", help="Print result metadata as JSON.")
     return parser
+
+
+def print_function_call_usage() -> None:
+    print(
+        "\n".join(
+            [
+                "Data Digitizer 2.11.mac CLI",
+                "",
+                "Use one quoted function-call line:",
+                "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "",
+                "Full manual inputs:",
+                "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "",
+                "Blank color, ticks, axis values, or output_dir use auto/default behavior:",
+                "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", , , , output_dir=\"/Users/yourname/Downloads/testcli\")'",
+            ]
+        )
+    )
+
+
+def is_function_call_syntax(argv: Sequence[str]) -> bool:
+    return bool(re.match(rf"^\s*{CALL_NAME}\s*\(", " ".join(argv).strip()))
+
+
+def _run_function_call(argv: Sequence[str]) -> int:
+    try:
+        kwargs = parse_function_call(" ".join(argv))
+        result = digitizer_cli(**kwargs)
+    except DigitizerCliError as exc:
+        print(f"digitizer error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"unexpected error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Pipeline done. Output data to {result.csv_path}. Points: {result.point_count}.")
+    print(f"Overlapping plot: {result.overlay_path}")
+    return 0
+
+
+def parse_function_call(call_text: str) -> dict[str, Any]:
+    text = call_text.strip()
+    match = re.match(rf"^{CALL_NAME}\s*\((.*)\)\s*$", text, re.DOTALL)
+    if not match:
+        raise DigitizerCliError(f"expected {CALL_NAME}(...)")
+
+    values: dict[str, Any] = {}
+    for index, raw_part in enumerate(_split_top_level(match.group(1))):
+        part = raw_part.strip()
+        if not part:
+            continue
+
+        name, raw_value = _split_keyword_argument(part)
+        if name is None:
+            if index >= len(CALL_SLOT_NAMES):
+                raise DigitizerCliError(f"too many positional values in {CALL_NAME}(...).")
+            values[CALL_SLOT_NAMES[index]] = _parse_call_value(part)
+            continue
+
+        canonical_name = _canonical_call_name(name)
+        if canonical_name is None:
+            raise DigitizerCliError(f"unknown {CALL_NAME}(...) input: {name}")
+        values[canonical_name] = _parse_call_value(raw_value)
+
+    axis_pieces = [values.get("xmin"), values.get("xmax"), values.get("ymin"), values.get("ymax")]
+    if _is_null_value(values.get("axis_values")) and any(not _is_null_value(value) for value in axis_pieces):
+        if not all(not _is_null_value(value) for value in axis_pieces):
+            raise DigitizerCliError("xmin, xmax, ymin, and ymax must be supplied together.")
+        values["axis_values"] = tuple(axis_pieces)
+
+    pic_dir = values.get("pic_dir")
+    if _is_null_value(pic_dir):
+        raise DigitizerCliError("pic_dir is required.")
+
+    return {
+        "pic_dir": pic_dir,
+        "color": values.get("color"),
+        "tick_setting": values.get("tick_setting"),
+        "axis_values": values.get("axis_values"),
+        "output_dir": values.get("output_dir"),
+        "normalize_y": _coerce_bool(values.get("normalize_y"), default=False),
+        "limit_to_calibration": _coerce_bool(values.get("limit_to_calibration"), default=True),
+    }
+
+
+def _split_top_level(text: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    escape = False
+
+    for index, char in enumerate(text):
+        if quote is not None:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == quote:
+                quote = None
+            continue
+
+        if char in {"'", '"'}:
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth < 0:
+                raise DigitizerCliError("unbalanced closing bracket in function-call input.")
+        elif char == "," and depth == 0:
+            parts.append(text[start:index])
+            start = index + 1
+
+    if quote is not None:
+        raise DigitizerCliError("unterminated quote in function-call input.")
+    if depth != 0:
+        raise DigitizerCliError("unbalanced brackets in function-call input.")
+
+    parts.append(text[start:])
+    return parts
+
+
+def _split_keyword_argument(part: str) -> tuple[str | None, str]:
+    depth = 0
+    quote: str | None = None
+    escape = False
+
+    for index, char in enumerate(part):
+        if quote is not None:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == quote:
+                quote = None
+            continue
+
+        if char in {"'", '"'}:
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "=" and depth == 0:
+            name = part[:index].strip()
+            if not re.match(r"^[A-Za-z_]\w*$", name):
+                return None, part
+            return name, part[index + 1 :].strip()
+
+    return None, part
+
+
+def _canonical_call_name(name: str) -> str | None:
+    normalized = name.strip().lower()
+    aliases = {
+        "pic_dir": "pic_dir",
+        "pic_path": "pic_dir",
+        "plot_location": "pic_dir",
+        "image": "pic_dir",
+        "image_path": "pic_dir",
+        "color": "color",
+        "rgb": "color",
+        "color_rgb": "color",
+        "tick_setting": "tick_setting",
+        "ticks": "tick_setting",
+        "tick_coordinates": "tick_setting",
+        "tick_coordinate": "tick_setting",
+        "axis_values": "axis_values",
+        "axis": "axis_values",
+        "bounds": "axis_values",
+        "xmin": "xmin",
+        "x_min": "xmin",
+        "xmax": "xmax",
+        "x_max": "xmax",
+        "ymin": "ymin",
+        "y_min": "ymin",
+        "ymax": "ymax",
+        "y_max": "ymax",
+        "output_dir": "output_dir",
+        "out_dir": "output_dir",
+        "normalize_y": "normalize_y",
+        "limit_to_calibration": "limit_to_calibration",
+    }
+    return aliases.get(normalized)
+
+
+def _parse_call_value(raw_value: str) -> Any:
+    value = raw_value.strip()
+    if _is_null(value):
+        return None
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    try:
+        return ast.literal_eval(value)
+    except (SyntaxError, ValueError):
+        return value
+
+
+def _print_standard_result(result: DigitizerOutputs) -> None:
+    print(f"CSV: {result.csv_path}")
+    print(f"Overlapping plot: {result.overlay_path}")
+    print(f"Points: {result.point_count}")
+    print(f"Color RGB: {result.color_rgb}")
+    print(f"Used OCR: {result.used_ocr}")
+
+
+def _coerce_rgb(value: object) -> Optional[tuple[int, int, int]]:
+    if _is_null_value(value):
+        return None
+    if isinstance(value, (list, tuple)):
+        if len(value) != 3:
+            raise DigitizerCliError("color expects 3 RGB values.")
+        rgb = tuple(int(round(float(item))) for item in value)
+        if any(item < 0 or item > 255 for item in rgb):
+            raise DigitizerCliError("color RGB values must be between 0 and 255.")
+        return rgb  # type: ignore[return-value]
+    return parse_rgb(str(value))
+
+
+def _coerce_points(value: object) -> Optional[list[tuple[float, float]]]:
+    if _is_null_value(value):
+        return None
+    if isinstance(value, (list, tuple)):
+        if len(value) == 4 and all(isinstance(item, (list, tuple)) for item in value):
+            points: list[tuple[float, float]] = []
+            for item in value:
+                if len(item) != 2:
+                    raise DigitizerCliError("each tick point must contain x,y pixel coordinates.")
+                points.append((float(item[0]), float(item[1])))
+            return points
+        if len(value) == 8:
+            numbers = [float(item) for item in value]
+            return [
+                (numbers[0], numbers[1]),
+                (numbers[2], numbers[3]),
+                (numbers[4], numbers[5]),
+                (numbers[6], numbers[7]),
+            ]
+        raise DigitizerCliError("tick_setting expects [x,y],[x,y],[x,y],[x,y].")
+    return parse_points(str(value))
+
+
+def _coerce_axis_values(value: object) -> Optional[list[float]]:
+    if _is_null_value(value):
+        return None
+    if isinstance(value, (list, tuple)):
+        if len(value) != 4:
+            raise DigitizerCliError("axis_values expects xmin,xmax,ymin,ymax.")
+        return [float(item) for item in value]
+    return parse_numbers(str(value), expected=4, name="axis-values")
+
+
+def _coerce_bool(value: object, default: bool) -> bool:
+    if _is_null_value(value):
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "t", "yes", "y"}:
+        return True
+    if text in {"0", "false", "f", "no", "n"}:
+        return False
+    raise DigitizerCliError(f"expected a boolean value, got {value!r}.")
+
+
+def _clean_path_object(value: str | Path | object) -> str | Path:
+    if isinstance(value, Path):
+        return value
+    text = str(value).strip()
+    if sys.platform == "darwin":
+        text = text.replace("\\ ", " ")
+    return text
+
+
+def _is_null_value(value: object) -> bool:
+    return value is None or (isinstance(value, str) and _is_null(value))
 
 
 def parse_rgb(value: Optional[str]) -> Optional[tuple[int, int, int]]:
