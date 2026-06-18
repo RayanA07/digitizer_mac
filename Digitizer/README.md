@@ -193,11 +193,105 @@ If either message appears, glance at the status bar, go back, and finish that st
 
 ## Using the command line
 
-> **Important:** The command line runs from the **source files with Python installed** — see [Run from source](#run-from-source-for-developers). The prebuilt **`Digitizer.app` is the click-and-go app only**: it always opens the graphical window and ignores any command-line options. If you want to type commands, you need the source code and Python, not the `.app`.
+> ### ⚠️ Read this first — the `.app` is NOT the command line
+>
+> The **`Digitizer.app`** you downloaded is the **graphical app**. It does **not**
+> contain `digitizer.py`, and you **cannot run command-line commands inside it**.
+>
+> If you open a terminal *inside* the app and try the CLI, e.g.:
+>
+> ```bash
+> cd /Applications/Digitizer.app
+> python3 digitizer.py 'digitizer_cli(pic_dir="...")'
+> ```
+>
+> you will get exactly this error — and it is **not a bug**:
+>
+> ```text
+> python3: can't open file '/Applications/Digitizer.app/digitizer.py': [Errno 2] No such file or directory
+> ```
+>
+> The command line is a **separate** way to use the tool that runs from the **source
+> code** (the project files), with Python — not from the `.app`. The `.app` always just
+> opens the graphical window and ignores any command-line options.
+>
+> **Most people don't need the command line at all — just double-click `Digitizer.app`.**
+> Only follow the steps below if you specifically want to script/batch from the terminal.
 
-### Open a terminal in the Digitizer folder
+### Set up the command line from scratch (one time, ~5 minutes)
 
-1. Open **Finder** and find the `Digitizer` source folder.
+You need three things the `.app` alone doesn't give you: **Python**, **Tesseract** (the OCR
+engine), and the **source code**. Open **Terminal** (press **⌘ + Space**, type
+`Terminal`, press **Enter**) and do this:
+
+**1. Make sure you have Python 3.** Run `python3 --version`. If it prints a version
+(e.g. `Python 3.13.x`) you're set. If it says *command not found*, install it from
+<https://python.org> (or `brew install python`), then reopen Terminal.
+
+**2. Install Homebrew** (a package manager — skip if `brew --version` already works):
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Follow its prompts, then **close and reopen Terminal**.
+
+**3. Install Tesseract** (so OCR axis-detection works from source):
+
+```bash
+brew install tesseract
+```
+
+**4. Download the source code.** The app is not enough — get the project files. Easiest
+way, no git needed:
+
+  1. Open **<https://github.com/RayanA07/digitizer_mac>** in your browser.
+  2. Click the green **`<> Code`** button → **Download ZIP**.
+  3. Open your **Downloads** folder and **double-click the ZIP** to unzip it. You'll get a
+     folder named **`digitizer_mac-main`**.
+
+  *(If you prefer git: `git clone https://github.com/RayanA07/digitizer_mac.git`.)*
+
+**5. Go into the `Digitizer` folder** — the one that actually contains `digitizer.py`
+(inside `digitizer_mac-main`, **not** the `.app`):
+
+```bash
+cd ~/Downloads/digitizer_mac-main/Digitizer
+```
+
+Confirm you're in the right place — this must list the file:
+
+```bash
+ls digitizer.py
+```
+
+If that says *No such file or directory*, you're in the wrong folder. You must be in the
+**source** `Digitizer` folder — not `Digitizer.app`, and not `digitizer_mac-main` itself.
+
+**6. Install the Python libraries** (one time):
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+You're done setting up. Stay in this `Digitizer` folder and run the commands below. For
+example, to digitize an image (use your own file's full path):
+
+```bash
+python3 digitizer.py /Users/you/Downloads/pilot_04.png
+```
+
+or the function-call form:
+
+```bash
+python3 digitizer.py 'digitizer_cli(pic_dir="/Users/you/Downloads/pilot_04.png")'
+```
+
+### Open a terminal in the Digitizer folder (shortcut for next time)
+
+Once you have the source, instead of typing `cd` each time you can:
+
+1. Open **Finder** and find the **`Digitizer`** source folder (the one with `digitizer.py`).
 2. **Right-click** (or Control-click) the folder.
 3. Choose **New Terminal at Folder**. (If you don't see it, enable **System Settings → Keyboard → Keyboard Shortcuts → Services → "New Terminal at Folder"**.)
 
@@ -417,6 +511,9 @@ Expected on the first run — the app just isn't notarized. Right-click → **Op
 
 **I can't find `Digitizer.app` after downloading it.**
 It's in your **Downloads** folder. Open **Finder** and click **Downloads** in the sidebar. If you only see the `.zip`, double-click it to unpack the app.
+
+**`can't open file '/Applications/Digitizer.app/digitizer.py': No such file or directory`** (or any `digitizer.py` "No such file" error).
+You're trying to run the command line from **inside the `.app`** — but the `.app` is the graphical program and doesn't contain `digitizer.py`. The CLI runs from the **source code**, which is a separate download. Follow [Set up the command line from scratch](#set-up-the-command-line-from-scratch-one-time-5-minutes), then run the command from the **source `Digitizer` folder** (the one where `ls digitizer.py` succeeds) — not from `Digitizer.app`. If you only want to digitize without the terminal, just double-click `Digitizer.app`.
 
 **"`python3: command not found`" in the terminal.**
 Python isn't installed. Install it from <https://python.org> or run `brew install python`, then open a fresh terminal and try again. (Reminder: the command line needs Python; the `.app` does not.)

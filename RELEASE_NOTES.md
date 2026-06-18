@@ -7,6 +7,14 @@ macOS Tahoe build of Data Digitizer 2.12.
 - **`Digitizer-macos.app.zip`** — the main Data Digitizer app (`Digitizer.app`). Double-click the zip to unpack `Digitizer.app`. Tesseract OCR is bundled inside the app, so axis detection and masking work with no extra install.
 - **`AccuracyTester-macos.app.zip`** — the optional Accuracy Tester app (`AccuracyTester.app`) for comparing a digitized CSV against a reference CSV.
 
+## Just want to digitize a graph? Double-click `Digitizer.app`
+
+These downloads are the **graphical apps** — open them and follow the on-screen steps. No Python, no terminal, nothing to install.
+
+## Want the command line (`python3 digitizer.py ...`)?
+
+The `.app` is **not** the command line and does **not** contain `digitizer.py` — running `python3 digitizer.py` *inside* `Digitizer.app` gives `No such file or directory`, which is expected. The CLI runs from the **source code** (a separate download) with Python + Tesseract. See **["Set up the command line from scratch" in the README](https://github.com/RayanA07/digitizer_mac#set-up-the-command-line-from-scratch-one-time-5-minutes)** for the full step-by-step.
+
 ## Opening the apps (Gatekeeper)
 
 These builds are ad-hoc signed, not Apple Developer ID notarized. The first time you open one, macOS may say:
