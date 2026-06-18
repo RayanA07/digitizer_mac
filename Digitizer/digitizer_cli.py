@@ -23,6 +23,7 @@ def digitizer_cli(
     output_dir: str | Path | None = None,
     normalize_y: bool = False,
     limit_to_calibration: bool = True,
+    verbose: object = 0,
 ) -> DigitizerOutputs:
     """Function-style wrapper for one-line CLI/API use."""
 
@@ -30,13 +31,14 @@ def digitizer_cli(
         raise DigitizerCliError("pic_dir is required.")
 
     return digitize_image(
-        pic_dir=_clean_path_object(pic_dir),
+        pic_dir=pic_dir,
         color_rgb=_coerce_rgb(color),
         tick_points=_coerce_points(tick_setting),
         axis_values=_coerce_axis_values(axis_values),
-        output_dir=None if _is_null_value(output_dir) else _clean_path_object(output_dir),
+        output_dir=None if _is_null_value(output_dir) else output_dir,
         normalize_y=bool(normalize_y),
         limit_to_calibration=bool(limit_to_calibration),
+        verbose=_coerce_verbose(verbose),
     )
 
 
@@ -52,42 +54,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not pic_path:
         parser.error("provide an image path as a positional argument or with --pic-dir")
 
-    axis_values = args.axis_values
-    manual_axis_values = [args.xmin, args.xmax, args.ymin, args.ymax]
-    if axis_values and any(value is not None for value in manual_axis_values):
-        parser.error("use either --axis-values or --xmin --xmax --ymin --ymax, not both")
-    if not axis_values and any(value is not None for value in manual_axis_values):
-        if not all(value is not None for value in manual_axis_values):
-            parser.error("--xmin, --xmax, --ymin, and --ymax must be supplied together")
-        axis_values = ",".join(str(value) for value in manual_axis_values)
-
+    verbose = _coerce_verbose(args.verbose)
     try:
         result = digitizer_cli(
             pic_dir=pic_path,
             color=args.color,
             tick_setting=args.ticks,
-            axis_values=axis_values,
+            axis_values=args.axis_values,
             output_dir=args.output_dir,
             normalize_y=args.normalize_y,
             limit_to_calibration=args.limit_to_calibration,
+            verbose=verbose,
         )
     except DigitizerCliError as exc:
         print(f"digitizer error: {exc}", file=sys.stderr)
         return 2
     except Exception as exc:
-        print(f"unexpected error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        _report_unexpected(exc, verbose)
         return 1
 
-    if args.json:
-        print(result.to_json())
-    else:
-        _print_standard_result(result)
+    _emit_result(result, as_json=args.json, verbose=verbose)
     return 0
 
 
 def interactive_main() -> int:
     print()
-    print("Data Digitizer 2.11.mac Interactive CLI")
+    print("Data Digitizer 2.12 Interactive CLI")
     print("Leave optional fields blank and press Enter to use auto/default behavior.")
     print()
 
@@ -139,12 +131,18 @@ def interactive_main() -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="datadigitizer",
-        description="Digitize an image from the terminal using the existing Data Digitizer algorithms.",
+        prog="digitizer",
+        description=(
+            "Digitize a plot image into a CSV (+ overlay). With just an image path it "
+            "auto-detects the curve color and the axes (OCR) and saves to your Downloads folder."
+        ),
         epilog=(
-            "Function-call mode:\n"
-            "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", output_dir=\"/Users/yourname/Downloads/testcli\")'\n"
-            "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", , ([10,200],[500,200],[10,200],[10,20]), (0,10,0,100), output_dir=\"/Users/yourname/Downloads/testcli\")'"
+            "Examples:\n"
+            "  python3 digitizer.py plot2.png\n"
+            "  python3 digitizer.py plot2.png --verbose 1\n"
+            "  python3 digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100\n"
+            "  python3 digitizer.py plot2.png --ticks \"[10,200],[500,200],[10,200],[10,20]\" --out /Users/you/Downloads/out\n"
+            "A bare filename is also looked up in your Downloads folder."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -163,13 +161,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--axis-values",
+        "--axis",
+        dest="axis_values",
         help="Axis values as 'xmin,xmax,ymin,ymax'. If omitted, OCR axis detection is used.",
     )
-    parser.add_argument("--xmin", help="X-axis minimum value. Use with --xmax --ymin --ymax.")
-    parser.add_argument("--xmax", help="X-axis maximum value. Use with --xmin --ymin --ymax.")
-    parser.add_argument("--ymin", help="Y-axis minimum value. Use with --xmin --xmax --ymax.")
-    parser.add_argument("--ymax", help="Y-axis maximum value. Use with --xmin --xmax --ymin.")
-    parser.add_argument("--output-dir", help="Output directory. Defaults to the image directory.")
+    parser.add_argument(
+        "--output-dir",
+        "--out",
+        "-o",
+        dest="output_dir",
+        help="Output folder. Default: your Downloads folder.",
+    )
     parser.add_argument("--normalize-y", action="store_true", help="Add a y_norm column to the CSV.")
     parser.add_argument(
         "--limit-to-calibration",
@@ -185,6 +187,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Match the GUI default and export points outside the calibration window too.",
     )
     parser.add_argument("--json", action="store_true", help="Print result metadata as JSON.")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        dest="verbose",
+        nargs="?",
+        type=int,
+        const=1,
+        default=0,
+        help=(
+            "Verbosity level. 0 (default) prints only success + output folder. "
+            "1 (or just -v / --verbose) prints color, pixel coords, tick->OCR values, "
+            "point count, and OCR confidence, and writes a <image>_log.txt."
+        ),
+    )
     return parser
 
 
@@ -192,16 +208,49 @@ def print_function_call_usage() -> None:
     print(
         "\n".join(
             [
-                "Data Digitizer 2.11.mac CLI",
+                "Data Digitizer 2.12 CLI",
                 "",
                 "Use one quoted function-call line:",
-                "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", output_dir=\"/Users/you/Downloads/testcli\")'",
                 "",
                 "Full manual inputs:",
-                "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/you/Downloads/testcli\")'",
                 "",
                 "Blank color, ticks, axis values, or output_dir use auto/default behavior:",
-                "  ./datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", , , , output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", , , , output_dir=\"/Users/you/Downloads/testcli\")'",
+            ]
+        )
+    )
+
+
+def print_template() -> None:
+    """Print a ready-to-copy digitizer_cli(...) line that users can edit."""
+
+    print(
+        "\n".join(
+            [
+                "Function-call template - copy a line below, then change the values.",
+                "Keep the single quotes around the whole digitizer_cli(...) call.",
+                "",
+                "Minimal (auto-detect the color, OCR the axes, save to Downloads):",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\")'",
+                "",
+                "Full template (every option - delete the parts you don't need):",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\", color=(255,0,0), "
+                "axis_values=(0,10,0,100), tick_setting=([10,200],[500,200],[10,200],[10,20]), "
+                "output_dir=\"/Users/you/Downloads/out\", normalize_y=False, "
+                "limit_to_calibration=True, verbose=1, json=False)'",
+                "",
+                "What each value means:",
+                "  pic_dir=\"...\"               required - image file (a bare name is looked up in Downloads)",
+                "  color=(R,G,B)               curve color, each 0-255; omit to auto-detect",
+                "  axis_values=(x0,x1,y0,y1)   axis numbers (xmin,xmax,ymin,ymax); omit to read by OCR",
+                "  tick_setting=([x,y] x4)     tick pixel points x_min,x_max,y_min,y_max; omit for OCR",
+                "  output_dir=\"...\"            folder to save into; omit for Downloads",
+                "  normalize_y=True            add a 0-1 normalized Y column to the CSV",
+                "  limit_to_calibration=False  also keep points outside the calibration box",
+                "  verbose=1                   show full detail + write a <image>_log.txt (0 = quiet)",
+                "  json=True                   print the full result details as JSON",
             ]
         )
     )
@@ -212,18 +261,20 @@ def is_function_call_syntax(argv: Sequence[str]) -> bool:
 
 
 def _run_function_call(argv: Sequence[str]) -> int:
+    verbose = 0
     try:
         kwargs = parse_function_call(" ".join(argv))
+        as_json = bool(kwargs.pop("_json", False))
+        verbose = _coerce_verbose(kwargs.get("verbose", 0))
         result = digitizer_cli(**kwargs)
     except DigitizerCliError as exc:
         print(f"digitizer error: {exc}", file=sys.stderr)
         return 2
     except Exception as exc:
-        print(f"unexpected error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        _report_unexpected(exc, verbose)
         return 1
 
-    print(f"Pipeline done. Output data to {result.csv_path}. Points: {result.point_count}.")
-    print(f"Overlapping plot: {result.overlay_path}")
+    _emit_result(result, as_json=as_json, verbose=verbose)
     return 0
 
 
@@ -251,12 +302,6 @@ def parse_function_call(call_text: str) -> dict[str, Any]:
             raise DigitizerCliError(f"unknown {CALL_NAME}(...) input: {name}")
         values[canonical_name] = _parse_call_value(raw_value)
 
-    axis_pieces = [values.get("xmin"), values.get("xmax"), values.get("ymin"), values.get("ymax")]
-    if _is_null_value(values.get("axis_values")) and any(not _is_null_value(value) for value in axis_pieces):
-        if not all(not _is_null_value(value) for value in axis_pieces):
-            raise DigitizerCliError("xmin, xmax, ymin, and ymax must be supplied together.")
-        values["axis_values"] = tuple(axis_pieces)
-
     pic_dir = values.get("pic_dir")
     if _is_null_value(pic_dir):
         raise DigitizerCliError("pic_dir is required.")
@@ -269,6 +314,9 @@ def parse_function_call(call_text: str) -> dict[str, Any]:
         "output_dir": values.get("output_dir"),
         "normalize_y": _coerce_bool(values.get("normalize_y"), default=False),
         "limit_to_calibration": _coerce_bool(values.get("limit_to_calibration"), default=True),
+        "verbose": _coerce_verbose(values.get("verbose")),
+        # Not a digitizer_cli argument; _run_function_call pops it to pick the output style.
+        "_json": _coerce_bool(values.get("json"), default=False),
     }
 
 
@@ -358,18 +406,18 @@ def _canonical_call_name(name: str) -> str | None:
         "axis_values": "axis_values",
         "axis": "axis_values",
         "bounds": "axis_values",
-        "xmin": "xmin",
-        "x_min": "xmin",
-        "xmax": "xmax",
-        "x_max": "xmax",
-        "ymin": "ymin",
-        "y_min": "ymin",
-        "ymax": "ymax",
-        "y_max": "ymax",
         "output_dir": "output_dir",
         "out_dir": "output_dir",
+        "out": "output_dir",
         "normalize_y": "normalize_y",
+        "normalize": "normalize_y",
         "limit_to_calibration": "limit_to_calibration",
+        "limit": "limit_to_calibration",
+        "verbose": "verbose",
+        "v": "verbose",
+        "json": "json",
+        "as_json": "json",
+        "print_json": "json",
     }
     return aliases.get(normalized)
 
@@ -388,10 +436,87 @@ def _parse_call_value(raw_value: str) -> Any:
 
 def _print_standard_result(result: DigitizerOutputs) -> None:
     print(f"CSV: {result.csv_path}")
-    print(f"Overlapping plot: {result.overlay_path}")
+    print(f"Overlay: {result.overlay_path}")
     print(f"Points: {result.point_count}")
     print(f"Color RGB: {result.color_rgb}")
     print(f"Used OCR: {result.used_ocr}")
+
+
+def _coerce_verbose(value: object) -> int:
+    """Normalize a verbose value (flag, bool, int, or string) to an int level >= 0."""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, int):
+        return max(0, value)
+    text = str(value).strip().lower()
+    if text in {"", "none", "null", "false", "no", "off"}:
+        return 0
+    if text in {"true", "yes", "on"}:
+        return 1
+    try:
+        return max(0, int(float(text)))
+    except ValueError:
+        raise DigitizerCliError(f"verbose expects a number (0, 1, ...), got {value!r}.")
+
+
+def _output_paths(result: DigitizerOutputs) -> list[str]:
+    paths = [result.csv_path, result.overlay_path]
+    if result.log_path:
+        paths.append(result.log_path)
+    return paths
+
+
+def _emit_result(result: DigitizerOutputs, as_json: bool, verbose: int) -> None:
+    if as_json:
+        print(result.to_json())
+    elif verbose >= 1:
+        _print_verbose(result)
+    else:
+        _print_minimal(result)
+
+
+def _print_minimal(result: DigitizerOutputs) -> None:
+    """verbose=0: success line + output folder + the file names written there."""
+    out_dir = Path(result.csv_path).parent
+    print(f"Success. Output -> {out_dir}")
+    for path_str in _output_paths(result):
+        print(f"    {Path(path_str).name}")
+
+
+def _print_verbose(result: DigitizerOutputs) -> None:
+    """verbose>=1: full detail (color, pixel coords, tick->OCR, points, OCR confidence)."""
+    out_dir = Path(result.csv_path).parent
+    x_min_pt, x_max_pt, y_min_pt, y_max_pt = result.tick_points
+    x_min, x_max, y_min, y_max = result.axis_values
+    color = result.color_rgb
+    axis_source = "OCR" if result.used_ocr else "provided manually"
+    conf = (
+        f"{result.ocr_confidence:.1f}%"
+        if result.ocr_confidence is not None
+        else "n/a (axes not read by OCR)"
+    )
+    print("Digitized successfully.")
+    print(f"    color (r,g,b)  : {color[0]}, {color[1]}, {color[2]}")
+    print(f"    pixel coords   : x_min={x_min_pt} x_max={x_max_pt} y_min={y_min_pt} y_max={y_max_pt}")
+    print(f"    tick -> values : x_min={x_min} x_max={x_max} y_min={y_min} y_max={y_max}  ({axis_source})")
+    print(f"    OCR confidence : {conf}")
+    print(f"    num points     : {result.point_count}")
+    print(f"    elapsed (s)    : {result.elapsed_seconds:.2f}")
+    print(f"    output dir     : {out_dir}")
+    for path_str in _output_paths(result):
+        print(f"        {Path(path_str).name}")
+
+
+def _report_unexpected(exc: Exception, verbose: int) -> None:
+    """Quiet mode shows a one-line error; verbose mode shows the full traceback."""
+    if verbose >= 1:
+        import traceback
+
+        traceback.print_exc()
+    else:
+        print(f"unexpected error: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 def _coerce_rgb(value: object) -> Optional[tuple[int, int, int]]:
@@ -451,15 +576,6 @@ def _coerce_bool(value: object, default: bool) -> bool:
     if text in {"0", "false", "f", "no", "n"}:
         return False
     raise DigitizerCliError(f"expected a boolean value, got {value!r}.")
-
-
-def _clean_path_object(value: str | Path | object) -> str | Path:
-    if isinstance(value, Path):
-        return value
-    text = str(value).strip()
-    if sys.platform == "darwin":
-        text = text.replace("\\ ", " ")
-    return text
 
 
 def _is_null_value(value: object) -> bool:

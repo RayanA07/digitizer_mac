@@ -1,28 +1,33 @@
-# 2.11.mac
+# Data Digitizer 2.12 (macOS)
 
-macOS Tahoe release package for Data Digitizer 2.11.
+macOS Tahoe build of Data Digitizer 2.12.
 
-Included:
+## Downloads
 
-- `DataDigitizer Installer.app` windowed installer with progress bar
-- installer copies apps to `~/Applications/Data Digitizer`
-- installer creates Desktop launchers for Digitizer, AccuracyTester, and CLI help
-- `Digitizer.app` desktop app
-- `AccuracyTester.app` desktop app
-- `datadigitizer` CLI executable
-- one-line `digitizer_cli(...)` CLI syntax matching the Windows 2.11 wrapper
-- CLI inputs for `pic_dir`, RGB color, tick setting, axis bounds, and output directory
-- CLI outputs for digitized CSV data and an overlapping plot PNG
-- explicit `interactive` CLI fallback command
-- bundled Tesseract OCR runtime for digitizer OCR features
-- GitHub Actions macOS build and release workflow
+- **`Digitizer-macos.app.zip`** — the main Data Digitizer app (`Digitizer.app`). Double-click the zip to unpack `Digitizer.app`. Tesseract OCR is bundled inside the app, so axis detection and masking work with no extra install.
+- **`AccuracyTester-macos.app.zip`** — the optional Accuracy Tester app (`AccuracyTester.app`) for comparing a digitized CSV against a reference CSV.
 
-Build target:
+## Opening the apps (Gatekeeper)
 
-- macOS Tahoe via GitHub Actions `macos-26`
-- Python 3.11
-- PyInstaller app bundles plus a CLI executable
+These builds are ad-hoc signed, not Apple Developer ID notarized. The first time you open one, macOS may say:
 
-Note:
+> "Digitizer.app" cannot be opened because it is from an unidentified developer.
 
-- Builds are ad-hoc signed but not Apple Developer ID notarized. Gatekeeper may require right-click / Control-click -> Open, or quarantine removal with `xattr`.
+To open it anyway:
+
+1. **Right-click** (or Control-click) `Digitizer.app` and choose **Open**, then click **Open** again in the dialog, **or**
+2. Open **System Settings → Privacy & Security**, scroll to the message about the blocked app, and click **Open Anyway**.
+
+You only need to do this once per app.
+
+If macOS reports the app as "damaged", clear the quarantine flag in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine "$HOME/Downloads/Digitizer.app"
+xattr -dr com.apple.quarantine "$HOME/Downloads/AccuracyTester.app"
+```
+
+## Build
+
+- Built on the GitHub Actions `macos-26` (macOS Tahoe) runner with Python 3.11 and PyInstaller.
+- Both apps are produced by `Digitizer/build_macos.sh` and `AccuracyTester/build_macos.sh`.

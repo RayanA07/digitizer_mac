@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Vendor a self-contained Tesseract OCR runtime into Digitizer/vendor/tesseract:
+#   - the tesseract binary
+#   - tessdata/eng.traineddata + osd.traineddata
+#   - the dependent dylibs (bundled with dylibbundler, rewritten to @executable_path/lib)
+#
+# Run from a Mac with Homebrew installed. The PyInstaller spec then copies
+# vendor/tesseract into Digitizer.app so OCR works without any system Tesseract.
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENDOR_DIR="$ROOT/vendor/tesseract"
 TESSDATA_DIR="$VENDOR_DIR/tessdata"
 

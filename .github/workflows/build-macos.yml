@@ -1,4 +1,4 @@
-name: Build macOS 2.11.mac
+name: Build macOS 2.12
 
 on:
   push:
@@ -30,24 +30,34 @@ jobs:
           brew update
           brew install tesseract dylibbundler
 
-      - name: Install Python dependencies
+      - name: Build Digitizer.app
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-macos.txt
+          cd Digitizer
+          bash build_macos.sh
 
-      - name: Build macOS artifacts
-        run: bash scripts/build_macos.sh
+      - name: Build AccuracyTester.app
+        run: |
+          cd AccuracyTester
+          bash build_macos.sh
 
-      - name: Upload build artifact
+      - name: Upload Digitizer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: datadigitizer-2.11.mac
-          path: release/*
+          name: Digitizer-macos
+          path: Digitizer/dist/*.zip
+
+      - name: Upload AccuracyTester artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AccuracyTester-macos
+          path: AccuracyTester/dist/*.zip
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: Data Digitizer 2.11.mac
+          name: Data Digitizer 2.12 (macOS)
           body_path: RELEASE_NOTES.md
-          files: release/*
+          files: |
+            Digitizer/dist/*.zip
+            AccuracyTester/dist/*.zip

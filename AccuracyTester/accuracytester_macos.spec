@@ -6,13 +6,17 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 block_cipher = None
-spec_dir = Path(SPECPATH)
-root = spec_dir.parents[1]
+root = Path(SPECPATH)
 
 datas = [(str(root / "version.json"), ".")]
 datas += collect_data_files("matplotlib")
 datas += collect_data_files("tkinterdnd2")
+
 hiddenimports = collect_submodules("tkinterdnd2")
+
+# Icon is optional: if assets/accuracytester.icns is missing, build without one.
+icon_path = root / "assets" / "accuracytester.icns"
+icon = str(icon_path) if icon_path.is_file() else None
 
 a = Analysis(
     [str(root / "accuracytester_desktop.py")],
@@ -46,6 +50,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=icon,
 )
 
 coll = COLLECT(
@@ -62,12 +67,12 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="AccuracyTester.app",
-    icon=str(root / "assets" / "accuracytester.icns"),
-    bundle_identifier="com.aj24by7.datadigitizer.accuracytester",
+    icon=icon,
+    bundle_identifier="com.rayana07.datadigitizer.accuracytester",
     info_plist={
         "CFBundleDisplayName": "AccuracyTester",
-        "CFBundleShortVersionString": "2.11.mac",
-        "CFBundleVersion": "2.11.mac",
+        "CFBundleShortVersionString": "2.12",
+        "CFBundleVersion": "2.12",
         "NSHighResolutionCapable": True,
     },
 )

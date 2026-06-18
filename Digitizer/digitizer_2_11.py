@@ -22,6 +22,11 @@ def main(argv: list[str] | None = None) -> int:
         from digitizer_cli import interactive_main
 
         return interactive_main()
+    if command in {"template", "--template"}:
+        from digitizer_cli import print_template
+
+        print_template()
+        return 0
     if command in {"--help", "-h", "help"}:
         print_help()
         return 0
@@ -36,6 +41,8 @@ def main(argv: list[str] | None = None) -> int:
 
 def configure_runtime_paths() -> None:
     """Set writable runtime paths without changing the existing modules."""
+
+    _suppress_subprocess_console()
 
     app_dir = _user_app_data_dir()
     log_dir = app_dir / "logs"
@@ -73,6 +80,26 @@ def configure_runtime_paths() -> None:
             pass
 
 
+def _suppress_subprocess_console() -> None:
+    """Prevent bundled console tools (Tesseract, invoked by pytesseract) from
+    briefly flashing a console window when run from the windowed executable."""
+    if sys.platform != "win32":
+        return
+    import subprocess
+
+    if getattr(subprocess, "_digitizer_no_window_patched", False):
+        return
+    create_no_window = 0x08000000  # CREATE_NO_WINDOW
+    original_init = subprocess.Popen.__init__
+
+    def _init(self, *args, **kwargs):
+        kwargs["creationflags"] = kwargs.get("creationflags", 0) | create_no_window
+        original_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _init
+    subprocess._digitizer_no_window_patched = True
+
+
 def launch_digitizer_gui() -> int:
     from PyQt6 import QtWidgets
 
@@ -80,7 +107,7 @@ def launch_digitizer_gui() -> int:
 
     app = QtWidgets.QApplication.instance()
     if app is None:
-        app = QtWidgets.QApplication(["DataDigitizer-2.11"])
+        app = QtWidgets.QApplication(["Digitizer"])
     window = DigitizerWindow()
     window.show()
     return int(app.exec())
@@ -90,19 +117,28 @@ def print_help() -> None:
     print(
         "\n".join(
             [
-                "Data Digitizer 2.11.mac",
+                "Data Digitizer 2.12",
                 "",
-                "Double-click or run with no arguments:",
-                "  Digitizer.app",
+                "Open the graphical app:",
+                "  double-click Digitizer.app   (or from source: python3 digitizer_2_11.py)",
                 "",
-                "Run CLI digitization:",
-                "  datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "Digitize one image from the command line (saves CSV + overlay to Downloads):",
+                "  python3 digitizer.py plot2.png",
                 "",
-                "Run CLI with manual color, ticks, and axis values:",
-                "  datadigitizer 'digitizer_cli(pic_dir=\"/Users/yourname/Downloads/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/yourname/Downloads/testcli\")'",
+                "Add detail as needed:",
+                "  python3 digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100 --out /Users/you/Downloads/out --normalize-y",
                 "",
-                "Show CLI options:",
-                "  datadigitizer cli --help",
+                "See everything (color, pixel coords, tick->OCR, points, OCR confidence) + write a log:",
+                "  python3 digitizer.py plot2.png --verbose 1",
+                "",
+                "Function-call / template style (one quoted line, copy and edit it):",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\", color=(255,0,0), axis_values=(0,10,0,100))'",
+                "",
+                "Print a fill-in-the-blank template with every option:",
+                "  python3 digitizer.py template",
+                "",
+                "Full CLI options:",
+                "  python3 digitizer.py --help",
             ]
         )
     )
@@ -119,34 +155,38 @@ def _looks_like_cli_invocation(args: list[str]) -> bool:
         "--tick-setting",
         "--tick-coordinates",
         "--axis-values",
-        "--xmin",
-        "--xmax",
-        "--ymin",
-        "--ymax",
+        "--axis",
         "--output-dir",
+        "--out",
+        "-o",
         "--normalize-y",
         "--limit-to-calibration",
         "--no-limit-to-calibration",
+        "--verbose",
+        "-v",
         "--json",
     }
     if any(arg.split("=", 1)[0] in cli_flags for arg in args):
         return True
-    return bool(args and Path(args[0]).expanduser().exists())
+    if args:
+        first = Path(args[0]).expanduser()
+        if first.exists():
+            return True
+        if len(first.parts) == 1 and (Path.home() / "Downloads" / first.name).is_file():
+            return True
+    return False
 
 
 def _user_app_data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     if base:
-        return Path(base) / "DataDigitizer" / "2.11.mac"
-
+        return Path(base) / "DataDigitizer" / "2.12"
     mac_base = os.environ.get("XDG_DATA_HOME")
     if mac_base:
-        return Path(mac_base) / "DataDigitizer" / "2.11.mac"
-
+        return Path(mac_base) / "DataDigitizer" / "2.12"
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "DataDigitizer" / "2.11.mac"
-
-    return Path.home() / ".datadigitizer" / "2.11.mac"
+        return Path.home() / "Library" / "Application Support" / "DataDigitizer" / "2.12"
+    return Path.home() / ".datadigitizer" / "2.12"
 
 
 def _resolve_tesseract_cmd(bundle_root: Path) -> Path | None:
