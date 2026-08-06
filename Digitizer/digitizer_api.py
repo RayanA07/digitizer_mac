@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -10,12 +11,22 @@ from typing import Optional, Sequence, Tuple
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+from app_version import APP_TITLE
 from UI import DigitizerWindow
 
 
 Point = Tuple[int, int]
 AxisValues = Tuple[float, float, float, float]
 ColorRgb = Tuple[int, int, int]
+
+# Below this mean OCR confidence (%), a low-confidence axis read is warned about
+# (but never blocked -- see the C1 warning in digitize_image).
+_LOW_AXIS_CONFIDENCE = 55.0
+
+# Below this smaller-dimension pixel count, tick labels are usually too small for reliable
+# OCR. Chosen from measurement: charts under ~700px misread often; the Pilot benchmark
+# (1800px) and the real spectra (~1100px) read correctly.
+_MIN_COMFORTABLE_PIXELS = 700
 
 
 class DigitizerCliError(RuntimeError):
@@ -46,15 +57,19 @@ def digitize_image(
     tick_points: Optional[Sequence[Sequence[int | float]]] = None,
     axis_values: Optional[Sequence[int | float]] = None,
     output_dir: str | Path | None = None,
+    log_x: bool = False,
+    log_y: bool = False,
     normalize_y: bool = False,
-    limit_to_calibration: bool = True,
+    limit_to_calibration: bool = False,
     verbose: int = 0,
 ) -> DigitizerOutputs:
     """Digitize a plot image using the existing GUI algorithms.
 
     `tick_points` order is x_min, x_max, y_min, y_max in image pixel
     coordinates. `axis_values` order is x_min, x_max, y_min, y_max in plot
-    coordinates. `verbose` only changes which extra artifacts are written: at
+    coordinates. `log_x` / `log_y` interpolate that axis in base-10 log space
+    (the axis min/max must be positive), mirroring the GUI's per-axis log
+    toggles. `verbose` only changes which extra artifacts are written: at
     `verbose >= 1` a `<image>_log.txt` run record is written alongside the CSV.
     """
 
@@ -70,6 +85,23 @@ def digitize_image(
     if image.isNull():
         raise DigitizerCliError(f"Failed to load image: {image_path}")
 
+    # Resolution is the single strongest predictor of a silently wrong result. OCR has to read
+    # the printed tick labels, and on a small figure they are only a few pixels tall, so it
+    # misreads them -- then every exported number is rescaled and the run still reports
+    # success. Measured on plain matplotlib charts saved at the default size: 55%, 93% and 279%
+    # error, all reported "Success" with an OCR confidence of 95%. The same charts re-saved at
+    # dpi=200 came out at 1.14%, 1.00% and 0.76%. Confidence does not catch this, so warn on
+    # the input itself.
+    if not image.isNull() and min(image.width(), image.height()) < _MIN_COMFORTABLE_PIXELS:
+        print(
+            f"WARNING: this image is small ({image.width()}x{image.height()}). The axis numbers "
+            "may be too few pixels tall for OCR to read reliably, and a misread tick silently "
+            "rescales every exported value. If the numbers look wrong, re-save the figure at a "
+            "higher resolution (in matplotlib: dpi=200 or more), or pass the axis values "
+            "yourself with --axis (and --ticks to pin the pixel positions).",
+            file=sys.stderr,
+        )
+
     window = DigitizerWindow()
     window.set_image(image)
 
@@ -78,7 +110,10 @@ def digitize_image(
         _apply_color(window, requested_color)
 
     if window._selected_color is None:
-        raise DigitizerCliError("No color was supplied and auto color selection did not find a usable color.")
+        raise DigitizerCliError(
+            "No color was supplied and auto color selection did not find a usable color; "
+            "supply a color explicitly with --color r,g,b (CLI) or color=(r,g,b)."
+        )
 
     provided_ticks = _normalize_ticks(tick_points) if tick_points is not None else None
     provided_axis = _normalize_axis_values(axis_values) if axis_values is not None else None
@@ -90,6 +125,25 @@ def digitize_image(
 
     if provided_axis is None:
         provided_axis = _axis_values_from_detection(window)
+    elif provided_ticks is None:
+        # The supplied values are attached to the tick PIXELS that OCR picked, which are not
+        # necessarily the outermost ticks. Someone who passes the plot's true axis range while
+        # detection anchored on an inner gridline silently rescales every exported number --
+        # measured at R2 0.950 -> -2.71 on a real spectrum, with correlation unchanged at 0.975
+        # so the curve still looks right. Say so; the run is still allowed to proceed.
+        detected = _detected_tick_values(window)
+        if detected is not None and any(
+            d is not None and abs(float(d) - float(v)) > 1e-9 for d, v in zip(detected, provided_axis)
+        ):
+            print(
+                "WARNING: --axis values are applied to the tick positions the detector found, "
+                f"not to the corners of the plot. It anchored on ticks it read as "
+                f"x:{detected[0]}..{detected[1]}, y:{detected[2]}..{detected[3]}, and you supplied "
+                f"x:{provided_axis[0]}..{provided_axis[1]}, y:{provided_axis[2]}..{provided_axis[3]}. "
+                "If those ticks are NOT the ends of your axes, every exported value will be "
+                "rescaled. Pass --ticks as well to pin the pixel positions too.",
+                file=sys.stderr,
+            )
 
     _apply_axis_values(window, provided_axis)
 
@@ -98,6 +152,14 @@ def digitize_image(
     else:
         _run_coordinate_calibration(window)
 
+    # Mirror the GUI's per-axis log toggles so the CLI exports the same values.
+    if log_x and (provided_axis[0] <= 0 or provided_axis[1] <= 0):
+        raise DigitizerCliError("Log X scale needs positive X min and X max values.")
+    if log_y and (provided_axis[2] <= 0 or provided_axis[3] <= 0):
+        raise DigitizerCliError("Log Y scale needs positive Y min and Y max values.")
+    window._x_log = bool(log_x)
+    window._y_log = bool(log_y)
+
     window._limit_points_to_calib = bool(limit_to_calibration)
     window._active_color_state().limit_points_to_calib = bool(limit_to_calibration)
     window._export_selected_color_indices = {window._active_color_index}
@@ -105,6 +167,13 @@ def digitize_image(
 
     headers, rows = _build_export_rows(window, normalize_y=normalize_y)
     if not rows:
+        # base_points are the raw detected points before the calibration-box filter; if
+        # they existed but the limited result is empty, the box filter removed them all.
+        if bool(limit_to_calibration) and _had_points_before_calibration_filter(window):
+            raise DigitizerCliError(
+                "Digitization produced no points inside the calibration box; "
+                "pass --no-limit-to-calibration to keep points outside it."
+            )
         raise DigitizerCliError("Digitization completed but produced no points.")
 
     stem = image_path.stem
@@ -118,6 +187,19 @@ def digitize_image(
     tick_points = _current_tick_points(window)
     ocr_confidence = _detection_confidence(window) if used_ocr else None
     elapsed_seconds = round(time.perf_counter() - start, 3)
+
+    # C1: a generous, non-blocking warning. When the axes were auto-detected and the
+    # OCR confidence is low, the axis values are the most likely thing to be wrong
+    # (a misread tick silently rescales every point). Warn so the number gets a second
+    # look -- but still return the result, since a low score is not always a wrong read.
+    if used_ocr and ocr_confidence is not None and ocr_confidence < _LOW_AXIS_CONFIDENCE:
+        print(
+            f"WARNING: axis auto-detection confidence is low ({ocr_confidence:.0f}%). "
+            f"The detected axis values (x: {provided_axis[0]}..{provided_axis[1]}, "
+            f"y: {provided_axis[2]}..{provided_axis[3]}) may be misread -- please verify "
+            f"them, or pass explicit axis values. Digitization still ran.",
+            file=sys.stderr,
+        )
 
     log_path: Optional[Path] = None
     if verbose >= 1:
@@ -134,6 +216,8 @@ def digitize_image(
             elapsed_seconds=elapsed_seconds,
             csv_path=csv_path,
             overlay_path=overlay_path,
+            x_log=bool(log_x),
+            y_log=bool(log_y),
         )
 
     return DigitizerOutputs(
@@ -236,6 +320,16 @@ def _run_axis_detection(window: DigitizerWindow) -> None:
         raise DigitizerCliError(window.status_label.text() or "Axis OCR detection failed.")
 
 
+def _detected_tick_values(window: DigitizerWindow) -> Optional[AxisValues]:
+    """The four tick values OCR read, or None if detection did not run/complete."""
+    result = getattr(window, "_axis_result", None)
+    if result is None:
+        return None
+    values = (result.x_min, result.x_max, result.y_min, result.y_max)
+    if any(v is None for v in values):
+        return None
+    return values  # type: ignore[return-value]
+
 def _axis_values_from_detection(window: DigitizerWindow) -> AxisValues:
     result = window._axis_result
     if result is None:
@@ -243,6 +337,26 @@ def _axis_values_from_detection(window: DigitizerWindow) -> AxisValues:
     values = (result.x_min, result.x_max, result.y_min, result.y_max)
     if any(value is None for value in values):
         raise DigitizerCliError("Axis OCR did not find all x/y min/max values.")
+    # Values supplied by hand go through _normalize_axis_values, which rejects a degenerate
+    # axis. OCR-derived values used to skip that check -- and when OCR misreads BOTH ticks on
+    # an axis as the same number, the scale collapses to zero and every point maps to that one
+    # value. The run still reported success: a CSV where every x is "8", exit code 0, no
+    # warning. Silently wrong numbers are the worst failure mode for this tool, so fail here.
+    x_min, x_max, y_min, y_max = values
+    if x_min == x_max:
+        raise DigitizerCliError(
+            f"Axis OCR read the same X value ({x_min}) for both the X-min and X-max ticks, so "
+            "the X scale would be degenerate and every exported x would be identical. "
+            "Pass the real axis range with --axis xmin,xmax,ymin,ymax "
+            "(run with --verbose 1 to see which ticks were detected)."
+        )
+    if y_min == y_max:
+        raise DigitizerCliError(
+            f"Axis OCR read the same Y value ({y_min}) for both the Y-min and Y-max ticks, so "
+            "the Y scale would be degenerate and every exported y would be identical. "
+            "Pass the real axis range with --axis xmin,xmax,ymin,ymax "
+            "(run with --verbose 1 to see which ticks were detected)."
+        )
     return values  # type: ignore[return-value]
 
 
@@ -274,7 +388,15 @@ def _run_coordinate_calibration(window: DigitizerWindow) -> None:
         raise DigitizerCliError("Axis OCR did not find all tick point positions needed for calibration.")
     window.run_coordinate_calibration()
     if window._calibration_result is None or window._get_axis_points() is None:
-        raise DigitizerCliError(window.status_label.text() or "Coordinate-mediated calibration failed.")
+        # Report the actual failure, not window.status_label.text() -- on this path the
+        # label can still hold the "calibration complete" success string, which is
+        # misleading. The real cause is that snap-to-black could not locate all four
+        # axis tick points from the OCR positions.
+        raise DigitizerCliError(
+            "Coordinate calibration could not locate all four axis tick points "
+            "(automatic snap-to-black failed near the detected tick labels). Check that "
+            "the axis lines are dark and unbroken, or pass explicit --ticks / --axis values."
+        )
 
 
 def _build_export_rows(window: DigitizerWindow, normalize_y: bool) -> tuple[list[str], list[list[float]]]:
@@ -313,8 +435,10 @@ def _build_export_rows(window: DigitizerWindow, normalize_y: bool) -> tuple[list
             if mapper is not None:
                 x_val, y_val = window._map_pixel_affine(mapper, x_px, y_px)
             else:
-                x_val = x_min_val + (x_px - left) * (x_max_val - x_min_val) / (right - left)
-                y_val = y_min_val + (bottom - y_px) * (y_max_val - y_min_val) / (bottom - top)
+                x_frac = (x_px - left) / (right - left)
+                y_frac = (bottom - y_px) / (bottom - top)
+                x_val = window._interp_axis(x_frac, x_min_val, x_max_val, window._x_log)
+                y_val = window._interp_axis(y_frac, y_min_val, y_max_val, window._y_log)
             row: list[float] = [index + 1, color_r, color_g, color_b, x_val, y_val, x_px, y_px]
             if normalize_y:
                 denom = y_max_val - y_min_val
@@ -322,6 +446,18 @@ def _build_export_rows(window: DigitizerWindow, normalize_y: bool) -> tuple[list
             rows.append(row)
 
     return headers, rows
+
+
+def _had_points_before_calibration_filter(window: DigitizerWindow) -> bool:
+    """True if any exported color slot detected raw points before the calibration-box
+    filter. Used to distinguish 'nothing detected at all' from 'the calibration box
+    filter removed every point' so the error can point at --no-limit-to-calibration."""
+    selected_indices = window._export_selected_color_indices or {window._active_color_index}
+    for index in selected_indices:
+        state = window._color_states[index]
+        if state.color is not None and state.base_points:
+            return True
+    return False
 
 
 def _write_csv(path: Path, headers: list[str], rows: list[list[float]]) -> None:
@@ -390,13 +526,15 @@ def _write_log(
     elapsed_seconds: float,
     csv_path: Path,
     overlay_path: Path,
+    x_log: bool = False,
+    y_log: bool = False,
 ) -> None:
     x_min_pt, x_max_pt, y_min_pt, y_max_pt = tick_points
     x_min, x_max, y_min, y_max = axis_values
     axis_source = "OCR" if used_ocr else "provided manually"
     conf_text = f"{ocr_confidence:.1f}%" if ocr_confidence is not None else "n/a (axes not read by OCR)"
     lines = [
-        "Data Digitizer 2.12 - run log",
+        f"{APP_TITLE} - run log",
         f"time             : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"elapsed (s)      : {elapsed_seconds:.2f}",
         f"image            : {image_path}",
@@ -408,6 +546,7 @@ def _write_log(
         f"    y_min tick   : {y_min_pt}",
         f"    y_max tick   : {y_max_pt}",
         f"tick -> values   : x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}  ({axis_source})",
+        f"axis scale       : X={'log10' if x_log else 'linear'}, Y={'log10' if y_log else 'linear'}",
         f"OCR confidence   : {conf_text}",
         f"num points       : {point_count}",
         "",

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from app_version import APP_TITLE
 from digitizer_api import DigitizerCliError, DigitizerOutputs, digitize_image
 
 
@@ -21,8 +22,10 @@ def digitizer_cli(
     tick_setting: object = None,
     axis_values: object = None,
     output_dir: str | Path | None = None,
+    log_x: object = False,
+    log_y: object = False,
     normalize_y: bool = False,
-    limit_to_calibration: bool = True,
+    limit_to_calibration: bool = False,
     verbose: object = 0,
 ) -> DigitizerOutputs:
     """Function-style wrapper for one-line CLI/API use."""
@@ -36,6 +39,8 @@ def digitizer_cli(
         tick_points=_coerce_points(tick_setting),
         axis_values=_coerce_axis_values(axis_values),
         output_dir=None if _is_null_value(output_dir) else output_dir,
+        log_x=_coerce_bool(log_x, default=False),
+        log_y=_coerce_bool(log_y, default=False),
         normalize_y=bool(normalize_y),
         limit_to_calibration=bool(limit_to_calibration),
         verbose=_coerce_verbose(verbose),
@@ -48,7 +53,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _run_function_call(raw_args)
 
     parser = build_parser()
-    args = parser.parse_args(raw_args)
+    args = parser.parse_args(_detach_nonnumeric_verbose(raw_args))
 
     pic_path = args.pic_dir_option or args.pic_path
     if not pic_path:
@@ -62,6 +67,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             tick_setting=args.ticks,
             axis_values=args.axis_values,
             output_dir=args.output_dir,
+            log_x=args.log_x,
+            log_y=args.log_y,
             normalize_y=args.normalize_y,
             limit_to_calibration=args.limit_to_calibration,
             verbose=verbose,
@@ -79,7 +86,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 def interactive_main() -> int:
     print()
-    print("Data Digitizer 2.12 Interactive CLI")
+    print(f"{APP_TITLE} Interactive CLI")
     print("Leave optional fields blank and press Enter to use auto/default behavior.")
     print()
 
@@ -109,6 +116,8 @@ def interactive_main() -> int:
                 tick_setting=values["ticks"],
                 axis_values=values["axis_values"],
                 output_dir=values["output_dir"],
+                log_x=values["log_x"],
+                log_y=values["log_y"],
                 normalize_y=values["normalize_y"],
                 limit_to_calibration=values["limit_to_calibration"],
             )
@@ -141,7 +150,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  python3 digitizer.py plot2.png\n"
             "  python3 digitizer.py plot2.png --verbose 1\n"
             "  python3 digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100\n"
-            "  python3 digitizer.py plot2.png --ticks \"[10,200],[500,200],[10,200],[10,20]\" --out /Users/you/Downloads/out\n"
+            "  python3 digitizer.py plot2.png --ticks \"[10,200],[500,200],[10,200],[10,20]\" --out C:\\out\n"
             "A bare filename is also looked up in your Downloads folder."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -166,25 +175,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Axis values as 'xmin,xmax,ymin,ymax'. If omitted, OCR axis detection is used.",
     )
     parser.add_argument(
+        "--log-x",
+        dest="log_x",
+        action="store_true",
+        help="Treat the X axis as base-10 logarithmic (X min and X max must be positive). Mirrors the GUI's log toggle.",
+    )
+    parser.add_argument(
+        "--log-y",
+        dest="log_y",
+        action="store_true",
+        help="Treat the Y axis as base-10 logarithmic (Y min and Y max must be positive). Mirrors the GUI's log toggle.",
+    )
+    parser.add_argument(
         "--output-dir",
         "--out",
         "-o",
         dest="output_dir",
         help="Output folder. Default: your Downloads folder.",
-    )
-    parser.add_argument("--normalize-y", action="store_true", help="Add a y_norm column to the CSV.")
-    parser.add_argument(
-        "--limit-to-calibration",
-        dest="limit_to_calibration",
-        action="store_true",
-        default=True,
-        help="Only export points inside the calibration window. This is the CLI default.",
-    )
-    parser.add_argument(
-        "--no-limit-to-calibration",
-        dest="limit_to_calibration",
-        action="store_false",
-        help="Match the GUI default and export points outside the calibration window too.",
     )
     parser.add_argument("--json", action="store_true", help="Print result metadata as JSON.")
     parser.add_argument(
@@ -192,7 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--verbose",
         dest="verbose",
         nargs="?",
-        type=int,
+        type=_verbose_value,
         const=1,
         default=0,
         help=(
@@ -201,30 +208,89 @@ def build_parser() -> argparse.ArgumentParser:
             "point count, and OCR confidence, and writes a <image>_log.txt."
         ),
     )
+    # --- Rarely needed extras (kept for power users; safe to ignore) -------------
+    parser.add_argument("--normalize-y", action="store_true", help="(Optional) Add a y_norm column to the CSV.")
+    parser.add_argument(
+        "--limit-to-calibration",
+        dest="limit_to_calibration",
+        action="store_true",
+        default=False,
+        help="(Optional) Only export points INSIDE the calibration window. Off by default: a tick "
+             "misread slightly short would otherwise clip real data off the ends of the curve.",
+    )
+    parser.add_argument(
+        "--no-limit-to-calibration",
+        dest="limit_to_calibration",
+        action="store_false",
+        help="(Optional) Keep points outside the calibration window. This is already the default; "
+             "the flag is kept so existing scripts keep working.",
+    )
     return parser
+
+
+def _verbose_value(token: str) -> object:
+    """Type for -v/--verbose: parse a numeric level, else leave the token alone.
+
+    A non-numeric token (e.g. an image path) is normally detached before parsing by
+    _detach_nonnumeric_verbose; if one still reaches here we return the implicit level
+    1 rather than raising an int-parse error so 'digitizer.py --verbose image.png' is safe.
+    """
+    text = str(token).strip()
+    try:
+        return int(text)
+    except ValueError:
+        return 1
+
+
+def _detach_nonnumeric_verbose(argv: Sequence[str]) -> list[str]:
+    """Insert the implicit level when -v/--verbose is followed by a non-numeric token.
+
+    With nargs='?', argparse would otherwise consume the next token (e.g. the image
+    path) as the verbose value. By only letting a numeric token attach to the flag,
+    'digitizer.py --verbose image.png' keeps image.png as the positional argument while
+    'digitizer.py --verbose 1 image.png' still reads the level.
+    """
+    args = list(argv)
+    out: list[str] = []
+    flags = {"-v", "--verbose"}
+    for index, token in enumerate(args):
+        out.append(token)
+        if token in flags:
+            following = args[index + 1] if index + 1 < len(args) else None
+            if following is None or not _looks_like_verbose_level(following):
+                out.append("1")
+    return out
+
+
+def _looks_like_verbose_level(token: str) -> bool:
+    try:
+        int(str(token).strip())
+    except ValueError:
+        return False
+    return True
 
 
 def print_function_call_usage() -> None:
     print(
         "\n".join(
             [
-                "Data Digitizer 2.12 CLI",
+                f"{APP_TITLE} CLI",
                 "",
                 "Use one quoted function-call line:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", output_dir=\"/Users/you/Downloads/testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
                 "",
                 "Full manual inputs:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/you/Downloads/testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
                 "",
                 "Blank color, ticks, axis values, or output_dir use auto/default behavior:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", , , , output_dir=\"/Users/you/Downloads/testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", , , , output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
             ]
         )
     )
 
 
 def print_template() -> None:
-    """Print a ready-to-copy digitizer_cli(...) line that users can edit."""
+    """Print a ready-to-copython3 digitizer_cli(...) line that users can edit."""
 
     print(
         "\n".join(
@@ -238,19 +304,22 @@ def print_template() -> None:
                 "Full template (every option - delete the parts you don't need):",
                 "  python3 digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\", color=(255,0,0), "
                 "axis_values=(0,10,0,100), tick_setting=([10,200],[500,200],[10,200],[10,20]), "
-                "output_dir=\"/Users/you/Downloads/out\", normalize_y=False, "
-                "limit_to_calibration=True, verbose=1, json=False)'",
+                "log_x=False, log_y=False, output_dir=\"C:/Users/User/Downloads/out\", "
+                "verbose=1, json=False, normalize_y=False, limit_to_calibration=False)'",
                 "",
                 "What each value means:",
                 "  pic_dir=\"...\"               required - image file (a bare name is looked up in Downloads)",
                 "  color=(R,G,B)               curve color, each 0-255; omit to auto-detect",
                 "  axis_values=(x0,x1,y0,y1)   axis numbers (xmin,xmax,ymin,ymax); omit to read by OCR",
                 "  tick_setting=([x,y] x4)     tick pixel points x_min,x_max,y_min,y_max; omit for OCR",
+                "  log_x=True                  read the X axis in base-10 log space (X min/max must be positive)",
+                "  log_y=True                  read the Y axis in base-10 log space (Y min/max must be positive)",
                 "  output_dir=\"...\"            folder to save into; omit for Downloads",
-                "  normalize_y=True            add a 0-1 normalized Y column to the CSV",
-                "  limit_to_calibration=False  also keep points outside the calibration box",
                 "  verbose=1                   show full detail + write a <image>_log.txt (0 = quiet)",
                 "  json=True                   print the full result details as JSON",
+                "  -- the two below are optional extras; leave them off for normal use --",
+                "  normalize_y=True            (optional) add a 0-1 normalized Y column to the CSV",
+                "  limit_to_calibration=True   (optional) drop points outside the calibration box (off by default)",
             ]
         )
     )
@@ -285,18 +354,27 @@ def parse_function_call(call_text: str) -> dict[str, Any]:
         raise DigitizerCliError(f"expected {CALL_NAME}(...)")
 
     values: dict[str, Any] = {}
-    for index, raw_part in enumerate(_split_top_level(match.group(1))):
+    # Track the positional slot separately so it only advances for UNNAMED parts;
+    # an empty slot (",,") still consumes a positional slot but contributes no value.
+    positional_index = 0
+    seen_keyword = False
+    for raw_part in _split_top_level(match.group(1)):
         part = raw_part.strip()
-        if not part:
-            continue
 
         name, raw_value = _split_keyword_argument(part)
         if name is None:
-            if index >= len(CALL_SLOT_NAMES):
+            if seen_keyword and part:
+                raise DigitizerCliError("positional value after keyword argument")
+            if positional_index >= len(CALL_SLOT_NAMES):
                 raise DigitizerCliError(f"too many positional values in {CALL_NAME}(...).")
-            values[CALL_SLOT_NAMES[index]] = _parse_call_value(part)
+            slot = CALL_SLOT_NAMES[positional_index]
+            positional_index += 1
+            if not part:
+                continue
+            values[slot] = _parse_call_value(part)
             continue
 
+        seen_keyword = True
         canonical_name = _canonical_call_name(name)
         if canonical_name is None:
             raise DigitizerCliError(f"unknown {CALL_NAME}(...) input: {name}")
@@ -312,8 +390,10 @@ def parse_function_call(call_text: str) -> dict[str, Any]:
         "tick_setting": values.get("tick_setting"),
         "axis_values": values.get("axis_values"),
         "output_dir": values.get("output_dir"),
+        "log_x": _coerce_bool(values.get("log_x"), default=False),
+        "log_y": _coerce_bool(values.get("log_y"), default=False),
         "normalize_y": _coerce_bool(values.get("normalize_y"), default=False),
-        "limit_to_calibration": _coerce_bool(values.get("limit_to_calibration"), default=True),
+        "limit_to_calibration": _coerce_bool(values.get("limit_to_calibration"), default=False),
         "verbose": _coerce_verbose(values.get("verbose")),
         # Not a digitizer_cli argument; _run_function_call pops it to pick the output style.
         "_json": _coerce_bool(values.get("json"), default=False),
@@ -325,15 +405,13 @@ def _split_top_level(text: str) -> list[str]:
     start = 0
     depth = 0
     quote: str | None = None
-    escape = False
 
     for index, char in enumerate(text):
         if quote is not None:
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == quote:
+            # Value semantics are literal (no unescaping in _parse_call_value), so a
+            # backslash never escapes here: only a matching quote char closes the string.
+            # This lets quoted Windows paths ending in a backslash parse correctly.
+            if char == quote:
                 quote = None
             continue
 
@@ -361,15 +439,12 @@ def _split_top_level(text: str) -> list[str]:
 def _split_keyword_argument(part: str) -> tuple[str | None, str]:
     depth = 0
     quote: str | None = None
-    escape = False
 
     for index, char in enumerate(part):
         if quote is not None:
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == quote:
+            # Literal value semantics: a backslash never escapes here, only a matching
+            # quote char closes the string, so trailing-backslash Windows paths parse.
+            if char == quote:
                 quote = None
             continue
 
@@ -409,6 +484,12 @@ def _canonical_call_name(name: str) -> str | None:
         "output_dir": "output_dir",
         "out_dir": "output_dir",
         "out": "output_dir",
+        "log_x": "log_x",
+        "logx": "log_x",
+        "x_log": "log_x",
+        "log_y": "log_y",
+        "logy": "log_y",
+        "y_log": "log_y",
         "normalize_y": "normalize_y",
         "normalize": "normalize_y",
         "limit_to_calibration": "limit_to_calibration",
@@ -674,9 +755,11 @@ def _prompt_values() -> Optional[dict[str, object]]:
         except DigitizerCliError as exc:
             print(f"Invalid axis values: {exc}")
 
+    log_x = _prompt_yes_no("Log scale on the X axis? [y/N]: ", default=False)
+    log_y = _prompt_yes_no("Log scale on the Y axis? [y/N]: ", default=False)
     output_dir = _clean_input(input("Output directory [blank = image folder]: "))
-    normalize_y = _prompt_yes_no("Add normalized Y column? [y/N]: ", default=False)
-    limit_to_calibration = _prompt_yes_no("Limit points to calibration window? [Y/n]: ", default=True)
+    normalize_y = _prompt_yes_no("Add normalized Y column? (optional) [y/N]: ", default=False)
+    limit_to_calibration = _prompt_yes_no("Limit points to calibration window? (optional) [y/N]: ", default=False)
 
     print()
     print("Summary")
@@ -684,6 +767,7 @@ def _prompt_values() -> Optional[dict[str, object]]:
     print(f"  color: {color or 'auto'}")
     print(f"  tick coordinates: {ticks or 'OCR auto'}")
     print(f"  axis values: {axis_values or 'OCR auto'}")
+    print(f"  log scale: X={'log' if log_x else 'linear'}, Y={'log' if log_y else 'linear'}")
     print(f"  output directory: {output_dir or 'image folder'}")
     print(f"  normalize y: {'yes' if normalize_y else 'no'}")
     print(f"  limit to calibration: {'yes' if limit_to_calibration else 'no'}")
@@ -694,6 +778,8 @@ def _prompt_values() -> Optional[dict[str, object]]:
         "color": color,
         "ticks": ticks,
         "axis_values": axis_values,
+        "log_x": log_x,
+        "log_y": log_y,
         "output_dir": output_dir or None,
         "normalize_y": normalize_y,
         "limit_to_calibration": limit_to_calibration,

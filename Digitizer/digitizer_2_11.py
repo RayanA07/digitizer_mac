@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app_version import APP_NAME, APP_TITLE, APP_VERSION
+
 import os
 import sys
 from pathlib import Path
@@ -117,7 +119,7 @@ def print_help() -> None:
     print(
         "\n".join(
             [
-                "Data Digitizer 2.12",
+                APP_TITLE,
                 "",
                 "Open the graphical app:",
                 "  double-click Digitizer.app   (or from source: python3 digitizer_2_11.py)",
@@ -159,6 +161,8 @@ def _looks_like_cli_invocation(args: list[str]) -> bool:
         "--output-dir",
         "--out",
         "-o",
+        "--log-x",
+        "--log-y",
         "--normalize-y",
         "--limit-to-calibration",
         "--no-limit-to-calibration",
@@ -180,13 +184,13 @@ def _looks_like_cli_invocation(args: list[str]) -> bool:
 def _user_app_data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     if base:
-        return Path(base) / "DataDigitizer" / "2.12"
+        return Path(base) / APP_NAME / APP_VERSION
     mac_base = os.environ.get("XDG_DATA_HOME")
     if mac_base:
-        return Path(mac_base) / "DataDigitizer" / "2.12"
+        return Path(mac_base) / APP_NAME / APP_VERSION
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "DataDigitizer" / "2.12"
-    return Path.home() / ".datadigitizer" / "2.12"
+        return Path.home() / "Library" / "Application Support" / APP_NAME / APP_VERSION
+    return Path.home() / f".{APP_NAME.lower()}" / APP_VERSION
 
 
 def _resolve_tesseract_cmd(bundle_root: Path) -> Path | None:

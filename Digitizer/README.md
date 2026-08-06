@@ -1,4 +1,4 @@
-# Data Digitizer 2.12 (macOS) — User Guide
+# Data Digitizer 2.15 (macOS) — User Guide
 
 ## What is this?
 
@@ -500,7 +500,7 @@ bash build_macos.sh
 
 The script installs dependencies, generates the icon, vendors a self-contained Tesseract runtime into `vendor/tesseract`, runs PyInstaller, ad-hoc signs the bundle, and zips it. The result is **`dist/Digitizer.app`** (and `dist/Digitizer-macos.app.zip`) — a windowed app you can double-click. The **Tesseract OCR runtime** is **bundled into the app**, so OCR features (axis-value detection and the text/number/legend masking tools) work without anyone needing a separate Tesseract install.
 
-> The `Build macOS 2.12` GitHub Actions workflow builds both apps on the `macos-26` (Tahoe) runner and uploads the zips. Pushing a tag like `v2.12` publishes a GitHub Release named **Data Digitizer 2.12 (macOS)** with both `.app` zips attached.
+> The `Build macOS 2.15` GitHub Actions workflow builds both apps on the `macos-26` (Tahoe) runner and uploads the zips. Pushing a tag like `v2.15` publishes a GitHub Release named **Data Digitizer 2.15 (macOS)** with both `.app` zips attached.
 
 ---
 
@@ -544,7 +544,7 @@ Check the status bar (the thin strip at the bottom). You need **all four Min-Max
 
 ## Folder contents
 
-This repository mirrors the Windows 2.12 layout, adapted for macOS:
+This repository mirrors the Windows 2.15 layout, adapted for macOS:
 
 ```text
 README.md                          # This guide (root)
@@ -601,4 +601,4 @@ See `AccuracyTester/README.md` for details.
 
 ---
 
-*Runtime logs are written to `~/Library/Application Support/DataDigitizer/2.12/logs` (you can also view them in-app via **Advanced → Error Log**).*
+*Runtime logs are written to `~/Library/Application Support/DataDigitizer/2.15/logs` (you can also view them in-app via **Advanced → Error Log**).*
