@@ -1,6 +1,6 @@
-# Data Digitizer 2.12 (macOS)
+# Data Digitizer 2.15 (macOS)
 
-macOS Tahoe build of Data Digitizer 2.12.
+macOS Tahoe build of Data Digitizer 2.15.
 
 ## Downloads
 
@@ -39,3 +39,6 @@ xattr -dr com.apple.quarantine "$HOME/Downloads/AccuracyTester.app"
 
 - Built on the GitHub Actions `macos-26` (macOS Tahoe) runner with Python 3.11 and PyInstaller.
 - Both apps are produced by `Digitizer/build_macos.sh` and `AccuracyTester/build_macos.sh`.
+- Every build is gated on the macOS test job: both unit-test suites, a help-text check,
+  and an end-to-end smoke test that digitizes a folder of charts and scores the results
+  against known-correct data (`tools/smoke_test.py`).

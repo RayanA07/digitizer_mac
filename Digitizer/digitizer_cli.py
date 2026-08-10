@@ -150,7 +150,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  python3 digitizer.py plot2.png\n"
             "  python3 digitizer.py plot2.png --verbose 1\n"
             "  python3 digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100\n"
-            "  python3 digitizer.py plot2.png --ticks \"[10,200],[500,200],[10,200],[10,20]\" --out C:\\out\n"
+            "  python3 digitizer.py plot2.png --ticks \"[10,200],[500,200],[10,200],[10,20]\" --out ~/Desktop/out\n"
             "A bare filename is also looked up in your Downloads folder."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -277,20 +277,20 @@ def print_function_call_usage() -> None:
                 f"{APP_TITLE} CLI",
                 "",
                 "Use one quoted function-call line:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", output_dir=\"/Users/you/Downloads/testcli\")'",
                 "",
                 "Full manual inputs:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/you/Downloads/testcli\")'",
                 "",
                 "Blank color, ticks, axis values, or output_dir use auto/default behavior:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", , , , output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
+                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", , , , output_dir=\"/Users/you/Downloads/testcli\")'",
             ]
         )
     )
 
 
 def print_template() -> None:
-    """Print a ready-to-copython3 digitizer_cli(...) line that users can edit."""
+    """Print a ready-to-copy digitizer_cli(...) line that users can edit."""
 
     print(
         "\n".join(
@@ -304,7 +304,7 @@ def print_template() -> None:
                 "Full template (every option - delete the parts you don't need):",
                 "  python3 digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\", color=(255,0,0), "
                 "axis_values=(0,10,0,100), tick_setting=([10,200],[500,200],[10,200],[10,20]), "
-                "log_x=False, log_y=False, output_dir=\"C:/Users/User/Downloads/out\", "
+                "log_x=False, log_y=False, output_dir=\"/Users/you/Downloads/out\", "
                 "verbose=1, json=False, normalize_y=False, limit_to_calibration=False)'",
                 "",
                 "What each value means:",

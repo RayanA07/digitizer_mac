@@ -35,7 +35,7 @@ Examples:
 
   python3 digitizer.py plot2.png --verbose 1
   python3 digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100
-  python3 digitizer.py "C:\Users\User\Desktop\graph.png" --out "C:\Users\User\Desktop\out"
+  python3 digitizer.py "$HOME/Desktop/graph.png" --out "$HOME/Desktop/out"
 
 Function-call / template style (one quoted line) also works. This is the form to
 copy-paste and edit when you want to set several things at once:
@@ -50,8 +50,8 @@ Digitize a whole FOLDER of images at once (batch mode). Give a folder instead of
 a file and every image in it is digitized; outputs land in two subfolders inside
 that folder (digitized_csvs/ and digitized_overlays/) plus a batch_report:
 
-  python3 digitizer.py C:\\charts
-  python3 digitizer.py batch C:\\charts --output-dir D:\\results
+  python3 digitizer.py ~/Downloads/charts
+  python3 digitizer.py batch ~/Downloads/charts --output-dir ~/Desktop/results
 
 To open the graphical app instead:
 

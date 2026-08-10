@@ -1,7 +1,7 @@
 """Guards against the version drifting out of sync again.
 
 2.14 shipped with version.json bumped but every user-visible string still reading 2.13 --
-the CLI banner, the GUI help, the run-log header, and the %LOCALAPPDATA% log directory --
+the CLI banner, the GUI help, the run-log header, and the Application Support log directory --
 because the number was copy-pasted into six files. These tests fail if any of that recurs.
 """
 

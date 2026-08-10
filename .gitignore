@@ -11,3 +11,4 @@ vendor/
 *.icns
 *.log
 .DS_Store
+smoke_out/

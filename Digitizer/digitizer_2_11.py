@@ -182,12 +182,11 @@ def _looks_like_cli_invocation(args: list[str]) -> bool:
 
 
 def _user_app_data_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA")
+    # macOS keeps per-app state in ~/Library/Application Support; XDG_DATA_HOME is honoured
+    # first so a test or a sandboxed run can redirect it without touching the real one.
+    base = os.environ.get("XDG_DATA_HOME")
     if base:
         return Path(base) / APP_NAME / APP_VERSION
-    mac_base = os.environ.get("XDG_DATA_HOME")
-    if mac_base:
-        return Path(mac_base) / APP_NAME / APP_VERSION
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / APP_NAME / APP_VERSION
     return Path.home() / f".{APP_NAME.lower()}" / APP_VERSION
@@ -196,12 +195,9 @@ def _user_app_data_dir() -> Path:
 def _resolve_tesseract_cmd(bundle_root: Path) -> Path | None:
     candidates = [
         bundle_root / "vendor" / "tesseract" / "tesseract",
-        bundle_root / "vendor" / "tesseract" / "tesseract.exe",
         Path("/opt/homebrew/bin/tesseract"),
         Path("/usr/local/bin/tesseract"),
         Path("/usr/bin/tesseract"),
-        Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
-        Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
     ]
     for candidate in candidates:
         if candidate.is_file():

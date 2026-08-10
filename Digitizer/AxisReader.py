@@ -125,10 +125,11 @@ def _resolve_tesseract_executable() -> Optional[Path]:
     env_cmd = os.environ.get("TESSERACT_CMD", "").strip().strip('"')
     candidates = [
         Path(env_cmd) if env_cmd else None,
-        here.parent / "vendor" / "tesseract" / "tesseract.exe",
-        here.parent.parent / "vendor" / "tesseract" / "tesseract.exe",
-        Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
-        Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
+        here.parent / "vendor" / "tesseract" / "tesseract",
+        here.parent.parent / "vendor" / "tesseract" / "tesseract",
+        Path("/opt/homebrew/bin/tesseract"),
+        Path("/usr/local/bin/tesseract"),
+        Path("/usr/bin/tesseract"),
     ]
     for path in candidates:
         if path is None:
@@ -143,8 +144,8 @@ def _resolve_tesseract_executable() -> Optional[Path]:
 
 def _missing_tesseract_message() -> str:
     return (
-        "Tesseract OCR executable not found. Install Tesseract and add it to PATH, "
-        "or set TESSERACT_CMD, or place it at vendor/tesseract/tesseract.exe."
+        "Tesseract OCR executable not found. Install it with `brew install tesseract`, "
+        "or set TESSERACT_CMD, or place it at vendor/tesseract/tesseract."
     )
 
 

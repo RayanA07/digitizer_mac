@@ -3,7 +3,7 @@
 version.json is already bundled into the exe by digitizer.spec, so read it at runtime
 instead of repeating the number in banners and the log path. Those were hardcoded in six
 places and silently drifted: 2.14 shipped with every string still reading 2.13, including
-the %LOCALAPPDATA%\\DataDigitizer\\<version>\\logs directory. test_app_version.py fails if
+the ~/Library/Application Support/DataDigitizer/<version>/logs directory. test_app_version.py fails if
 version.json and the fallback below ever disagree again.
 """
 

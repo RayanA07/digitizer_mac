@@ -15,8 +15,8 @@ One bad file never stops the run: a corrupt image, a non-plot photo, an OCR
 failure, or a file that is not an image at all is recorded and the batch moves on.
 
 Usage (also reachable as `python3 digitizer.py <folder>` or `python3 digitizer.py batch <folder>`):
-  python3 digitizer_batch_cli.py C:\\charts
-  python3 digitizer_batch_cli.py --input-dir C:\\charts --output-dir D:\\results
+  python3 digitizer_batch_cli.py ~/Downloads/charts
+  python3 digitizer_batch_cli.py --input-dir ~/Downloads/charts --output-dir ~/Desktop/results
 
 Exit codes: 0 = batch ran (check the report for per-file failures),
 2 = bad input (missing/empty folder, bad option), 1 = unexpected fatal error.
@@ -293,9 +293,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "Examples:\n"
-            "  python3 digitizer_batch_cli.py C:\\charts\n"
-            "  python3 digitizer_batch_cli.py --input-dir C:\\charts --output-dir D:\\results\n"
-            "  python3 digitizer.py C:\\charts          (same thing via the main CLI)\n"
+            "  python3 digitizer_batch_cli.py ~/Downloads/charts\n"
+            "  python3 digitizer_batch_cli.py --input-dir ~/Downloads/charts --output-dir ~/Desktop/results\n"
+            "  python3 digitizer.py ~/Downloads/charts     (same thing via the main CLI)\n"
             f"Supported image types: {', '.join(SUPPORTED_EXTENSIONS)}"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,

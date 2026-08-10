@@ -19,12 +19,12 @@ Accuracy Tester math from ``accuracy_core``, and writes:
                          failure_rate_pct = (1 - ok / total rows) * 100.
 
 Usage:
-  py accuracy_batch_cli.py --digitized-dir <folder> --ground-truth-dir <folder>
-                           [--output-dir <folder>] [--x-col x --y-col y]
-                           [--grid-mode original_x|digitized_x|common_uniform]
-                           [--grid-points 1000] [--dup-policy median|mean|first]
-                           [--color-slot N] [--extra-suffix _mysuffix ...]
-                           [--no-default-suffixes]
+  python3 accuracy_batch_cli.py --digitized-dir <folder> --ground-truth-dir <folder>
+                                [--output-dir <folder>] [--x-col x --y-col y]
+                                [--grid-mode original_x|digitized_x|common_uniform]
+                                [--grid-points 1000] [--dup-policy median|mean|first]
+                                [--color-slot N] [--extra-suffix _mysuffix ...]
+                                [--no-default-suffixes]
 
 Defaults mirror the Accuracy Tester GUI: grid mode ``original_x`` (score at
 the ground-truth x-values), 1000 grid points, duplicate-x policy ``median``,
@@ -245,8 +245,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "Examples:\n"
-            "  py accuracy_batch_cli.py --digitized-dir C:\\out --ground-truth-dir C:\\truth\n"
-            "  py accuracy_batch_cli.py --digitized-dir C:\\out --ground-truth-dir C:\\truth "
+            "  python3 accuracy_batch_cli.py --digitized-dir ~/Desktop/out --ground-truth-dir ~/Desktop/truth\n"
+            "  python3 accuracy_batch_cli.py --digitized-dir ~/Desktop/out --ground-truth-dir ~/Desktop/truth "
             "--grid-mode common_uniform --grid-points 500\n"
             "accuracy_report.csv holds one row per image with every statistic and a "
             "status column; accuracy_summary.json holds the failure rate."
@@ -258,7 +258,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ground-truth-dir", required=True,
                         help="Folder of ground-truth CSVs.")
     parser.add_argument("--output-dir", "--out", "-o", dest="output_dir",
-                        help="Report folder (created if absent). Default: <digitized-dir>\\accuracy_report.")
+                        help="Report folder (created if absent). Default: <digitized-dir>/accuracy_report.")
     parser.add_argument("--x-col", default="x", help="X column name in both CSVs (default: x).")
     parser.add_argument("--y-col", default="y", help="Y column name in both CSVs (default: y).")
     parser.add_argument("--grid-mode", default="original_x",

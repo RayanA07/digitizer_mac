@@ -1,7 +1,45 @@
 # Changelog
 
 All notable changes to this project are documented here. Versions follow the release tags
-on GitHub; download the apps from the [Releases page](https://github.com/aj24by7/DataDigitizer/releases/latest).
+on GitHub; download the apps from the [Releases page](https://github.com/RayanA07/digitizer_mac/releases/latest).
+
+## 2.15.1 (macOS)
+
+macOS-only follow-up to 2.15. No change to the digitizing or scoring maths -- the statistics
+engine is byte-identical to the Windows release and reproduces its numbers exactly.
+
+### Fixed
+
+- **CLI help printed Windows paths.** The original port ran a blind `py` -> `python3` sweep,
+  which left `C:\Users\...` and `C:\charts` examples in `digitizer.py --help`,
+  `digitizer.py template`, `digitizer_batch_cli.py --help` and `accuracy_batch_cli.py --help`,
+  plus a mangled `ready-to-copython3` docstring. All now show macOS paths.
+- **Tesseract was resolved as `tesseract.exe` only.** `AxisReader.py` and `Masking.py` searched
+  for the Windows binary and `C:\Program Files\Tesseract-OCR`, so a source checkout with a
+  vendored macOS Tesseract could not find it, and the error message told Mac users to install an
+  `.exe`. They now look for `vendor/tesseract/tesseract`, Homebrew (`/opt/homebrew`, `/usr/local`)
+  and `/usr/bin`, and the message says `brew install tesseract`.
+- **Enhanced Human Click's menu tooltip** said `Ctrl+Z`; it now shows the platform hint
+  (Command-Z on macOS), matching the settings dialog and the status bar.
+- **Log directory** no longer consults `%LOCALAPPDATA%` before the macOS location.
+
+### Added
+
+- `tools/smoke_test.py` -- end-to-end check: renders charts with known x,y, batch-digitizes the
+  folder, scores it with the batch accuracy CLI, and fails if any figure exceeds 2% NRMSE.
+- `tools/check_help_text.sh` -- fails the build if Windows-only text reappears in CLI help.
+  Errors out rather than passing when the interpreter is missing, so it cannot pass vacuously.
+- CI now runs both unit-test suites, the help-text check and the smoke test on `macos-26`
+  before the apps are built.
+
+### Documentation
+
+- README rewritten to full parity with the Windows guide: adds the log-scale axes section,
+  `--log-x` / `--log-y`, the build-pipeline table, the Enhanced Human Click walkthrough, and a
+  new **Batch mode** chapter covering batch digitizing and batch accuracy testing end to end.
+- Corrected `--limit-to-calibration`: it is **off** by default (since 2.14), not on. The Windows
+  README still describes the pre-2.14 behaviour.
+- `AccuracyTester/README.md` now documents the batch CLI, its options and its report columns.
 
 ## 2.15
 

@@ -278,7 +278,8 @@ class DigitizerWindow(QtWidgets.QMainWindow):
         self.act_enhanced_click.setChecked(False)
         self.act_enhanced_click.setToolTip(
             "During manual calibration, snap each click onto the crosshair, corner or axis "
-            "line nearest it. Corrects the ~0.9 px error of a human click. Ctrl+Z undoes a click.")
+            "line nearest it. Corrects the ~0.9 px error of a human click. "
+            f"{EnhancedClick.UNDO_HINT} undoes a click.")
         self.act_enhanced_settings = self.calibration_menu.addAction("Enhanced Click Settings...")
         self.act_calib_line.setVisible(False)  # hidden in 2.12
         self.tools_menu.addMenu(self.calibration_menu)
