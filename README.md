@@ -138,7 +138,7 @@ python ../AccuracyTester/accuracy_batch_cli.py --digitized-dir demo_out --ground
 ### macOS — no Python needed
 
 1. Check your chip: Apple menu → **About This Mac** (*Chip: Apple M…* = Apple Silicon, *Processor: Intel* = Intel).
-2. Open the **[latest macOS release](https://github.com/RayanA07/digitizer_mac/releases/latest)** and download `Digitizer-<version>-macOS-AppleSilicon.zip` or `…-macOS-Intel.zip`. Double-click it to unpack **`Digitizer.app`** (needs macOS 15 Sequoia or newer). Tesseract OCR is bundled inside.
+2. Open the **[latest macOS release](https://github.com/RayanA07/digitizer_mac/releases/latest)** and download `Digitizer-<version>-macOS-AppleSilicon.zip` or `…-macOS-Intel.zip`. Double-click it to unpack **`Digitizer.app`** (needs an up-to-date macOS 15 Sequoia or macOS 26; the exact minimum is on the release page). Tesseract OCR is bundled inside.
 3. First launch only: macOS says it can't verify the app — click **Done**, then **System Settings → Privacy & Security → Open Anyway**. The app simply isn't notarized with a paid Apple Developer ID.
 
 Keys, paths and the command-line setup on a Mac are in the **[macOS guide](Digitizer/README_macOS.md)**. To build the app yourself: `bash Digitizer/build_macos.sh` (needs Homebrew).

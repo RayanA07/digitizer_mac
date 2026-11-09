@@ -9,7 +9,9 @@ Three calibration modes, one curve-recovery workflow:
 
 This is the same code as the Windows release, built for Mac.
 
-## Install (macOS 15 Sequoia or newer)
+## Install
+
+**Requires** <!-- requirements --> — on Sequoia, install the latest macOS updates first (System Settings → General → Software Update).
 
 **1. Pick the zip for your Mac's chip.** Apple menu → **About This Mac**:
 - **Chip: Apple M1 / M2 / M3 / M4…** → download `Digitizer-<!-- vX.Y -->-macOS-AppleSilicon.zip`

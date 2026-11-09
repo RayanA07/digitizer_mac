@@ -13,7 +13,7 @@ setting up the command line, and building the app yourself.
 
 ## Install the app (no Python needed)
 
-**Requirements:** macOS 15 Sequoia or newer, on an Apple Silicon or Intel Mac.
+**Requirements:** an Apple Silicon or Intel Mac with **macOS 15 Sequoia (fully updated) or macOS 26 Tahoe**. The exact minimum for each build is printed at the top of its release page — for 2.16 it is macOS 15.8.1 on Apple Silicon and 15.0 on Intel, set by the version of Tesseract bundled inside.
 
 1. **Find out which chip your Mac has.** Apple menu → **About This Mac**.
    - **Chip: Apple M1, M2, M3, M4…** → you need the **AppleSilicon** download.

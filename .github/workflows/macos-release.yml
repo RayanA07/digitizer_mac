@@ -196,6 +196,16 @@ jobs:
           if tagged:
               parts.append(f"**Also included — the {version} release:**\n\n{tagged}" if pending else tagged)
           body = body.replace("<!-- bullets -->", "\n\n".join(parts) or "See the changelog.")
+          # State the real minimum macOS of each build, read from the Info.plist that
+          # build_macos.sh stamped (it moves when Homebrew rebuilds Tesseract).
+          import glob, plistlib, zipfile
+          reqs = []
+          for label, chip in (("Apple Silicon", "AppleSilicon"), ("Intel", "Intel")):
+              for z in sorted(glob.glob(f"dist/Digitizer-*-macOS-{chip}.zip")):
+                  with zipfile.ZipFile(z) as zf:
+                      plist = plistlib.loads(zf.read("Digitizer.app/Contents/Info.plist"))
+                  reqs.append(f"{label}: macOS {plist['LSMinimumSystemVersion']} or newer")
+          body = body.replace("<!-- requirements -->", " · ".join(reqs) or "macOS 15 or newer")
           Path("release_body.md").write_text(body, encoding="utf-8")
           EOF
           ls -l dist
