@@ -31,7 +31,7 @@ on GitHub; download the apps from the [Releases page](https://github.com/RayanA0
     must launch.
   - User-visible hints say **⌘Z** on a Mac; `--help` / `template` print `python3` and
     `~/…` paths; logs go to `~/Library/Application Support/DataDigitizer/<version>/logs`.
-  - New **[macOS guide](Digitizer/README_macOS.md)**.
+  - New **[macOS guide](https://github.com/RayanA07/digitizer_mac/blob/main/Digitizer/README_macOS.md)**.
 
 ### Changed
 
