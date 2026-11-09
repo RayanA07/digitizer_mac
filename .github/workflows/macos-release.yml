@@ -6,6 +6,9 @@ name: Build macOS apps and publish release
 #
 #   push / pull request                -> tests + builds; zips downloadable from the run
 #   create tag v2.16 (GitHub web UI)   -> release "LinePilot Digitizer 2.16 (macOS)"
+#   Actions -> Run workflow, release_tag = v2.16
+#                                      -> rebuilds that tag's code and (re)attaches the zips
+#                                         to its release, e.g. if a publish step failed
 #
 # Built on macOS 15, not 26, on purpose: the bundled Homebrew Tesseract only loads on the
 # macOS version it was compiled on or newer (see tools/macho_minos.py). The 2.12-2.15 builds
@@ -17,6 +20,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing tag to rebuild and attach to its release (e.g. v2.16). Empty = build only."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -33,6 +41,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - uses: actions/setup-python@v5
         with:
@@ -78,6 +88,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - uses: actions/setup-python@v5
         with:
@@ -167,19 +179,31 @@ jobs:
   release:
     name: Publish release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
+      # The artifacts keep their Digitizer/dist/ and AccuracyTester/dist/ folders; flatten
+      # them so the release gets plain file names (the v2.16 tag run failed on exactly this).
+      - name: Collect the zips
+        run: |
+          find dist -mindepth 2 -name '*.zip' -exec mv -t dist {} +
+          ls -l dist/*.zip
+          test "$(ls dist/*.zip | wc -l)" -eq 4
+
       - name: Release notes
         run: |
-          python3 - "${GITHUB_REF_NAME#v}" <<'EOF'
+          python3 - "${TAG#v}" <<'EOF'
           import re, sys
           from pathlib import Path
           version = sys.argv[1]
@@ -208,11 +232,12 @@ jobs:
           body = body.replace("<!-- requirements -->", " · ".join(reqs) or "macOS 15 or newer")
           Path("release_body.md").write_text(body, encoding="utf-8")
           EOF
-          ls -l dist
+          grep -n "Requires" release_body.md
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: LinePilot Digitizer ${{ github.ref_name }} (macOS)
+          tag_name: ${{ env.TAG }}
+          name: LinePilot Digitizer ${{ env.TAG }} (macOS)
           body_path: release_body.md
           files: dist/*.zip
           fail_on_unmatched_files: true
