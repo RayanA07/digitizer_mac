@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import json
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
@@ -7,6 +8,9 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 root = Path(SPECPATH)
+
+# Version for Finder's Get Info, read from version.json (was hardcoded to 2.12).
+VERSION = json.loads((root / "version.json").read_text(encoding="utf-8"))["version"]
 
 datas = [(str(root / "version.json"), ".")]
 datas += collect_data_files("matplotlib")
@@ -69,10 +73,13 @@ app = BUNDLE(
     name="AccuracyTester.app",
     icon=icon,
     bundle_identifier="com.rayana07.datadigitizer.accuracytester",
+    version=VERSION,
     info_plist={
-        "CFBundleDisplayName": "AccuracyTester",
-        "CFBundleShortVersionString": "2.12",
-        "CFBundleVersion": "2.12",
+        "CFBundleName": "AccuracyTester",
+        "CFBundleDisplayName": "LinePilot Accuracy Tester",
+        "CFBundleShortVersionString": VERSION,
+        "CFBundleVersion": VERSION,
+        "NSHumanReadableCopyright": "LinePilot Digitizer - Apache License 2.0",
         "NSHighResolutionCapable": True,
     },
 )

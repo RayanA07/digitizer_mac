@@ -1,7 +1,7 @@
 """Guards against the version drifting out of sync again.
 
 2.14 shipped with version.json bumped but every user-visible string still reading 2.13 --
-the CLI banner, the GUI help, the run-log header, and the Application Support log directory --
+the CLI banner, the GUI help, the run-log header, and the %LOCALAPPDATA% log directory --
 because the number was copy-pasted into six files. These tests fail if any of that recurs.
 """
 
@@ -30,7 +30,7 @@ def test_fallback_matches_version_json():
 
 def test_no_hardcoded_version_strings_in_sources():
     """Nothing may spell a version number itself; it must come from app_version."""
-    pattern = re.compile(r"Data Digitizer\s+\d+\.\d+")
+    pattern = re.compile(r"(Data|LinePilot) Digitizer\s+\d+\.\d+")
     offenders = []
     for path in SOURCES:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -40,4 +40,4 @@ def test_no_hardcoded_version_strings_in_sources():
 
 
 def test_app_title_matches_version():
-    assert app_version.APP_TITLE == f"Data Digitizer {app_version.APP_VERSION}"
+    assert app_version.APP_TITLE == f"LinePilot Digitizer {app_version.APP_VERSION}"

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Guard against Windows-only text creeping back into the macOS CLI help.
 #
-# This repo is a port, so the failure mode is a blind `py` -> `python3` sweep that leaves
-# `C:\Users\...` examples and `tesseract.exe` messages behind. Those print straight to a
-# Mac user's terminal in --help and in `digitizer.py template`. Cheap to check, easy to
+# Help text is written once in its Windows form and rewritten for macOS at print time by
+# Digitizer/platform_info.py (for_this_os). The failure mode is a new example added later
+# that the rewrite doesn't cover - a `C:\Users\...` path or `tesseract.exe` printed straight
+# to a Mac user's terminal by --help or `digitizer.py template`. Cheap to check, easy to
 # regress, so it runs in CI.
 #
 # Every command must exit 0 AND produce output. A guard that greps empty output would

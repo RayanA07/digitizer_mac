@@ -1,0 +1,208 @@
+name: Build macOS apps and publish release
+
+# Builds Digitizer.app and AccuracyTester.app for Apple Silicon and Intel Macs, proves the
+# shipped app reads axes with its OWN bundled OCR (the runner's Tesseract is uninstalled
+# first), and on a v* tag attaches all four zips to one GitHub release.
+#
+#   push / pull request                -> tests + builds; zips downloadable from the run
+#   create tag v2.16 (GitHub web UI)   -> release "LinePilot Digitizer 2.16 (macOS)"
+#
+# Built on macOS 15, not 26, on purpose: the bundled Homebrew Tesseract only loads on the
+# macOS version it was compiled on or newer (see tools/macho_minos.py). The 2.12-2.15 builds
+# came from a macOS 26 runner, which locked their OCR out of every Mac still on Sequoia.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Tests + smoke test (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, label: Apple Silicon }
+          - { runner: macos-15-intel, label: Intel }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Tesseract
+        run: |
+          brew install tesseract
+          tesseract --version
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r Digitizer/requirements.txt -r Digitizer/requirements-dev.txt
+          python -m pip install -r AccuracyTester/requirements.txt -r AccuracyTester/requirements-dev.txt
+
+      - name: Digitizer unit tests
+        working-directory: Digitizer
+        run: python -m pytest -q
+
+      - name: AccuracyTester unit tests
+        working-directory: AccuracyTester
+        run: python -m pytest -q
+
+      - name: Build-tool unit tests
+        run: python -m pytest -q tools/test_macho_minos.py
+
+      - name: CLI help must not print Windows-only text
+        run: PYTHON=python bash tools/check_help_text.sh
+
+      - name: End-to-end smoke test (render charts, batch digitize, score)
+        run: python tools/smoke_test.py
+
+  build:
+    name: Build (${{ matrix.label }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, label: Apple Silicon, arch: AppleSilicon }
+          - { runner: macos-15-intel, label: Intel, arch: Intel }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Homebrew packages
+        run: brew install tesseract dylibbundler
+
+      - name: Build Digitizer.app
+        run: PYTHON=python bash Digitizer/build_macos.sh
+
+      - name: Build AccuracyTester.app
+        run: PYTHON=python bash AccuracyTester/build_macos.sh
+
+      - name: Info.plist matches version.json
+        run: |
+          for pair in "Digitizer:Digitizer" "AccuracyTester:AccuracyTester"; do
+            dir="${pair%%:*}"; app="${pair##*:}"
+            plist="$dir/dist/$app.app/Contents/Info.plist"
+            want=$(python -c "import json; print(json.load(open('$dir/version.json'))['version'])")
+            got=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist")
+            minos=$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' "$plist")
+            echo "$app.app: version $got (version.json $want), requires macOS $minos, $(uname -m)"
+            if [ "$want" != "$got" ]; then echo "::error::$app.app Info.plist says $got, version.json says $want"; exit 1; fi
+          done
+
+      - name: Remove the runner's own Tesseract (the app must not depend on it)
+        run: |
+          brew uninstall --ignore-dependencies --force tesseract leptonica
+          if command -v tesseract; then echo "::error::a system tesseract is still on PATH"; exit 1; fi
+          echo "No system Tesseract left."
+
+      - name: Built app digitizes a real spectrum with its bundled OCR
+        run: |
+          out="$RUNNER_TEMP/selftest"
+          json=$(LINEPILOT_SELFTEST="$PWD/docs/assets/demo/example_raman.png" \
+                 LINEPILOT_SELFTEST_OUT="$out" \
+                 Digitizer/dist/Digitizer.app/Contents/MacOS/Digitizer | tail -1)
+          echo "$json"
+          python - "$json" <<'EOF'
+          import json, sys
+          r = json.loads(sys.argv[1])
+          assert r["ok"], r.get("error")
+          assert r["used_ocr"], "axes were not read by OCR"
+          assert "Digitizer.app" in (r["tesseract"] or ""), f"used a Tesseract outside the app: {r['tesseract']}"
+          assert r["axis_values"] == [400.0, 1800.0, 2000.0, 14000.0], f"OCR misread the axes: {r['axis_values']}"
+          assert r["points"] > 500, f"only {r['points']} points"
+          print("bundled OCR OK:", r["tesseract"])
+          EOF
+          mkdir -p "$RUNNER_TEMP/truth"
+          cp docs/assets/demo/example_raman_ground_truth.csv "$RUNNER_TEMP/truth/example_raman.csv"
+          python -m pip install -q -r AccuracyTester/requirements.txt
+          (cd AccuracyTester && python accuracy_batch_cli.py --digitized-dir "$out" \
+             --ground-truth-dir "$RUNNER_TEMP/truth" --output-dir "$RUNNER_TEMP/acc")
+          python - "$RUNNER_TEMP/acc/accuracy_report.csv" <<'EOF'
+          import csv, sys
+          row = next(r for r in csv.DictReader(open(sys.argv[1])) if r["image"] == "example_raman")
+          nrmse = float(row["nrmse_range_pct"])
+          print(f"example_raman: NRMSE {nrmse:.3f}% of range, R^2 {float(row['r2']):.5f}")
+          assert row["status"] == "ok" and nrmse < 2.0, row
+          EOF
+
+      - name: Both apps open and stay open
+        run: |
+          for app in Digitizer/dist/Digitizer.app/Contents/MacOS/Digitizer \
+                     AccuracyTester/dist/AccuracyTester.app/Contents/MacOS/AccuracyTester; do
+            "$app" > "$RUNNER_TEMP/launch.log" 2>&1 &
+            pid=$!
+            sleep 20
+            if ! kill -0 "$pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/launch.log"
+              echo "::error::$(basename "$app") exited during startup"
+              exit 1
+            fi
+            kill "$pid"
+            echo "$(basename "$app") launched and stayed up for 20 s"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinePilot-macOS-${{ matrix.arch }}
+          path: |
+            Digitizer/dist/*.zip
+            AccuracyTester/dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release notes
+        run: |
+          python3 - "${GITHUB_REF_NAME#v}" <<'EOF'
+          import re, sys
+          from pathlib import Path
+          version = sys.argv[1]
+          body = Path(".github/RELEASE_TEMPLATE_MACOS.md").read_text(encoding="utf-8")
+          body = body.replace("<!-- vX.Y -->", version)
+          log = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          def section(heading):
+              m = re.search(rf"(?s)^## {heading}\s*(.*?)(?=^## |\Z)", log, re.M)
+              return m.group(1).strip() if m else ""
+          # Changes not yet in a numbered section (e.g. the macOS rebuild) ship in this
+          # build too, so list them first, then the notes for the tagged version itself.
+          pending, tagged = section("Unreleased"), section(re.escape(version))
+          parts = [pending] if pending else []
+          if tagged:
+              parts.append(f"**Also included — the {version} release:**\n\n{tagged}" if pending else tagged)
+          body = body.replace("<!-- bullets -->", "\n\n".join(parts) or "See the changelog.")
+          Path("release_body.md").write_text(body, encoding="utf-8")
+          EOF
+          ls -l dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: LinePilot Digitizer ${{ github.ref_name }} (macOS)
+          body_path: release_body.md
+          files: dist/*.zip
+          fail_on_unmatched_files: true

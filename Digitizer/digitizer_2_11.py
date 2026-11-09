@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app_version import APP_NAME, APP_TITLE, APP_VERSION
+from platform_info import IS_MAC, IS_WINDOWS, find_tesseract, for_this_os
 
 import os
 import sys
@@ -16,7 +17,15 @@ def main(argv: list[str] | None = None) -> int:
     command = args[0].lower()
     if command in {"gui", "--gui"}:
         return launch_digitizer_gui()
+    if command in {"batch", "--batch"}:
+        from digitizer_batch_cli import main as batch_main
+
+        return batch_main(args[1:])
     if command in {"cli", "digitize"}:
+        if _folder_positional(args[1:]) is not None:
+            from digitizer_batch_cli import main as batch_main
+
+            return batch_main(args[1:])
         from digitizer_cli import main as cli_main
 
         return cli_main(args[1:])
@@ -33,6 +42,12 @@ def main(argv: list[str] | None = None) -> int:
         print_help()
         return 0
     if _looks_like_cli_invocation(args):
+        # A folder means batch mode, exactly as in digitizer.py - this entry point
+        # used to reject folders with "pic_dir must point to an image file".
+        if _folder_positional(args) is not None:
+            from digitizer_batch_cli import main as batch_main
+
+            return batch_main(args)
         from digitizer_cli import main as cli_main
 
         return cli_main(args)
@@ -67,13 +82,15 @@ def configure_runtime_paths() -> None:
     tesseract_cmd = _resolve_tesseract_cmd(bundle_root)
     if tesseract_cmd is not None:
         os.environ.setdefault("TESSERACT_CMD", str(tesseract_cmd))
-        lib_dir = tesseract_cmd.parent / "lib"
-        if lib_dir.exists():
-            current = os.environ.get("DYLD_LIBRARY_PATH", "")
-            paths = [str(lib_dir)]
-            if current:
-                paths.append(current)
-            os.environ["DYLD_LIBRARY_PATH"] = os.pathsep.join(paths)
+        if IS_MAC:
+            # The macOS build vendors Tesseract's dylibs into vendor/tesseract/lib and
+            # rewrites the binary to load them from @executable_path/lib; this is a
+            # belt-and-braces fallback for a hand-assembled vendor folder.
+            lib_dir = tesseract_cmd.parent / "lib"
+            if lib_dir.is_dir():
+                current = os.environ.get("DYLD_LIBRARY_PATH", "")
+                os.environ["DYLD_LIBRARY_PATH"] = os.pathsep.join(
+                    [str(lib_dir)] + ([current] if current else []))
         try:
             import pytesseract
 
@@ -105,7 +122,20 @@ def _suppress_subprocess_console() -> None:
 def launch_digitizer_gui() -> int:
     from PyQt6 import QtWidgets
 
+    import ErrorLogger
     from UI import DigitizerWindow
+
+    # PyQt6 calls qFatal() on any exception that escapes a slot, aborting the app and
+    # losing the user's digitizing session. Log it and keep running instead; the
+    # individual handlers still report their own errors to the status bar.
+    def _log_and_continue(exc_type, exc, tb) -> None:
+        try:
+            ErrorLogger.log_exception("unhandled exception in Qt event", exc)
+        except Exception:
+            pass
+        sys.__excepthook__(exc_type, exc, tb)
+
+    sys.excepthook = _log_and_continue
 
     app = QtWidgets.QApplication.instance()
     if app is None:
@@ -116,34 +146,34 @@ def launch_digitizer_gui() -> int:
 
 
 def print_help() -> None:
-    print(
+    print(for_this_os(
         "\n".join(
             [
                 APP_TITLE,
                 "",
                 "Open the graphical app:",
-                "  double-click Digitizer.app   (or from source: python3 digitizer_2_11.py)",
+                "  double-click Digitizer.exe   (or from source: py digitizer_2_11.py)",
                 "",
                 "Digitize one image from the command line (saves CSV + overlay to Downloads):",
-                "  python3 digitizer.py plot2.png",
+                "  py digitizer.py plot2.png",
                 "",
                 "Add detail as needed:",
-                "  python3 digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100 --out /Users/you/Downloads/out --normalize-y",
+                "  py digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100 --out C:/out --log-y",
                 "",
                 "See everything (color, pixel coords, tick->OCR, points, OCR confidence) + write a log:",
-                "  python3 digitizer.py plot2.png --verbose 1",
+                "  py digitizer.py plot2.png --verbose 1",
                 "",
                 "Function-call / template style (one quoted line, copy and edit it):",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\", color=(255,0,0), axis_values=(0,10,0,100))'",
+                "  py digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\", color=(255,0,0), axis_values=(0,10,0,100))'",
                 "",
                 "Print a fill-in-the-blank template with every option:",
-                "  python3 digitizer.py template",
+                "  py digitizer.py template",
                 "",
                 "Full CLI options:",
-                "  python3 digitizer.py --help",
+                "  py digitizer.py --help",
             ]
         )
-    )
+    ))
 
 
 def _looks_like_cli_invocation(args: list[str]) -> bool:
@@ -158,11 +188,11 @@ def _looks_like_cli_invocation(args: list[str]) -> bool:
         "--tick-coordinates",
         "--axis-values",
         "--axis",
+        "--log-x",
+        "--log-y",
         "--output-dir",
         "--out",
         "-o",
-        "--log-x",
-        "--log-y",
         "--normalize-y",
         "--limit-to-calibration",
         "--no-limit-to-calibration",
@@ -181,28 +211,37 @@ def _looks_like_cli_invocation(args: list[str]) -> bool:
     return False
 
 
+def _folder_positional(args: list[str]) -> str | None:
+    """The first positional argument when it is an existing directory, else None."""
+    from digitizer import _first_positional
+
+    first = _first_positional(list(args))
+    if first is not None and Path(first).expanduser().is_dir():
+        return first
+    return None
+
+
 def _user_app_data_dir() -> Path:
-    # macOS keeps per-app state in ~/Library/Application Support; XDG_DATA_HOME is honoured
-    # first so a test or a sandboxed run can redirect it without touching the real one.
-    base = os.environ.get("XDG_DATA_HOME")
-    if base:
-        return Path(base) / APP_NAME / APP_VERSION
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / APP_NAME / APP_VERSION
+    if IS_WINDOWS:
+        base = os.environ.get("LOCALAPPDATA")
+        if base:
+            return Path(base) / APP_NAME / APP_VERSION
+    else:
+        # XDG_DATA_HOME first so a test or sandboxed run can redirect it.
+        base = os.environ.get("XDG_DATA_HOME")
+        if base:
+            return Path(base) / APP_NAME / APP_VERSION
+        if IS_MAC:
+            return Path.home() / "Library" / "Application Support" / APP_NAME / APP_VERSION
     return Path.home() / f".{APP_NAME.lower()}" / APP_VERSION
 
 
 def _resolve_tesseract_cmd(bundle_root: Path) -> Path | None:
-    candidates = [
-        bundle_root / "vendor" / "tesseract" / "tesseract",
-        Path("/opt/homebrew/bin/tesseract"),
-        Path("/usr/local/bin/tesseract"),
-        Path("/usr/bin/tesseract"),
-    ]
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return None
+    # Same search order as AxisReader/Masking: env override, vendored copies,
+    # standard installs, then PATH - so a PATH-only Tesseract install is found
+    # here too instead of relying on the OCR modules to re-resolve later.
+    env_cmd = os.environ.get("TESSERACT_CMD", "").strip().strip('"')
+    return find_tesseract(env_cmd, (bundle_root, Path(__file__).resolve().parent))
 
 
 if __name__ == "__main__":

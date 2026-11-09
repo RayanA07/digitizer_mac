@@ -1,6 +1,4 @@
-*.app.zip filter=lfs diff=lfs merge=lfs -text
-*.pkg filter=lfs diff=lfs merge=lfs -text
-*.dmg filter=lfs diff=lfs merge=lfs -text
-*.zip filter=lfs diff=lfs merge=lfs -text
+# Shell scripts must keep LF endings or bash on macOS fails with "\r: command not found"
+# when they are edited or checked out on Windows.
 *.sh text eol=lf
 *.command text eol=lf

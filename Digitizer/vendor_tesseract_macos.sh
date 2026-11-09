@@ -53,4 +53,18 @@ dylibbundler \
   -d "$VENDOR_DIR/lib" \
   -p "@executable_path/lib"
 
-echo "Vendored Tesseract runtime at $VENDOR_DIR"
+# dylibbundler rewrites load paths with install_name_tool, which breaks each file's code
+# signature. Apple Silicon kills a binary with a broken signature on launch ("Killed: 9"),
+# which shows up in the app as OCR silently failing - so re-sign every piece ad hoc.
+codesign --force --sign - "$VENDOR_DIR/tesseract"
+for lib in "$VENDOR_DIR"/lib/*.dylib; do
+  codesign --force --sign - "$lib"
+done
+
+# Prove the vendored copy launches and finds its own bundled tessdata before PyInstaller
+# copies it into the app. (The CI workflow goes further: it uninstalls Homebrew's
+# Tesseract and runs OCR through the built app's copy.)
+TESSDATA_PREFIX="$TESSDATA_DIR" "$VENDOR_DIR/tesseract" --list-langs 2>&1 | grep -qx eng \
+  || { echo "Vendored tesseract cannot list the 'eng' language - bundle is broken." >&2; exit 1; }
+
+echo "Vendored Tesseract runtime at $VENDOR_DIR ($(TESSDATA_PREFIX="$TESSDATA_DIR" "$VENDOR_DIR/tesseract" --version 2>&1 | head -1))"

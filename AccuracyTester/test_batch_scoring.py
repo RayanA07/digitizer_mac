@@ -5,7 +5,7 @@ stems that themselves end in a strippable word, parse failures being
 misclassified, lexicographic color-slot ordering, ambiguous matches being
 resolved by guessing, and the report-file filter swallowing real data files.
 
-Run:  python3 -m pytest test_batch_scoring.py -v   (from the AccuracyTester folder)
+Run:  py -m pytest test_batch_scoring.py -v   (from the AccuracyTester folder)
 """
 
 from pathlib import Path

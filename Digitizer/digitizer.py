@@ -5,14 +5,15 @@ from pathlib import Path
 
 from app_version import APP_TITLE
 from digitizer_2_11 import configure_runtime_paths
+from platform_info import for_this_os
 
 
-USAGE = r"""Data Digitizer __VERSION__ - command line
+USAGE = for_this_os(r"""LinePilot Digitizer __VERSION__ - command line
 
 Digitize one image. With no options it auto-detects the curve color and the axes
 (via OCR) and saves the CSV + overlay to your Downloads folder:
 
-  python3 digitizer.py plot2.png
+  py digitizer.py plot2.png
 
 A bare filename is searched for in the current folder and in Downloads, so the line
 above works as long as plot2.png is in either place.
@@ -33,36 +34,36 @@ Add any of these for more control:
 
 Examples:
 
-  python3 digitizer.py plot2.png --verbose 1
-  python3 digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100
-  python3 digitizer.py "$HOME/Desktop/graph.png" --out "$HOME/Desktop/out"
+  py digitizer.py plot2.png --verbose 1
+  py digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100
+  py digitizer.py "C:\Users\User\Desktop\graph.png" --out "C:\Users\User\Desktop\out"
 
 Function-call / template style (one quoted line) also works. This is the form to
 copy-paste and edit when you want to set several things at once:
 
-  python3 digitizer.py 'digitizer_cli(pic_dir="plot2.png", color=(255,0,0), axis_values=(0,10,0,100))'
+  py digitizer.py 'digitizer_cli(pic_dir="plot2.png", color=(255,0,0), axis_values=(0,10,0,100))'
 
 Print a fill-in-the-blank template with every option:
 
-  python3 digitizer.py template
+  py digitizer.py template
 
 Digitize a whole FOLDER of images at once (batch mode). Give a folder instead of
 a file and every image in it is digitized; outputs land in two subfolders inside
 that folder (digitized_csvs/ and digitized_overlays/) plus a batch_report:
 
-  python3 digitizer.py ~/Downloads/charts
-  python3 digitizer.py batch ~/Downloads/charts --output-dir ~/Desktop/results
+  py digitizer.py C:\\charts
+  py digitizer.py batch C:\\charts --output-dir D:\\results
 
 To open the graphical app instead:
 
-  python3 digitizer_2_11.py
-""".replace("__VERSION__", APP_TITLE.split()[-1])
+  py digitizer_2_11.py
+""".replace("__VERSION__", APP_TITLE.split()[-1]))
 
 
 def _first_positional(args: list[str]) -> str | None:
     """First argument that is not an option flag or its value (used to sniff a folder)."""
     skip_next = False
-    for token in args:
+    for index, token in enumerate(args):
         if skip_next:
             skip_next = False
             continue
@@ -72,12 +73,26 @@ def _first_positional(args: list[str]) -> str | None:
             if "=" not in token and token in {
                 "--color", "--ticks", "--tick-setting", "--tick-coordinates",
                 "--axis-values", "--axis", "--output-dir", "--out", "-o",
-                "--pic-dir", "-v", "--verbose",
+                "--pic-dir",
             }:
                 skip_next = True
+            elif token in {"-v", "--verbose"}:
+                # -v's level is OPTIONAL (nargs='?'); only a numeric token attaches to
+                # it. Blanket-skipping used to swallow a following folder path, so
+                # `digitizer.py -v C:\charts` never reached batch mode.
+                following = args[index + 1] if index + 1 < len(args) else None
+                skip_next = following is not None and _is_int(following)
             continue
         return token
     return None
+
+
+def _is_int(token: str) -> bool:
+    try:
+        int(token.strip())
+    except ValueError:
+        return False
+    return True
 
 
 if __name__ == "__main__":

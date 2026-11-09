@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from app_version import APP_TITLE
+from platform_info import for_this_os
 from digitizer_api import DigitizerCliError, DigitizerOutputs, digitize_image
 
 
@@ -48,12 +49,18 @@ def digitizer_cli(
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    # Filenames can contain characters the console codepage cannot encode; never let
+    # the success print crash a run whose outputs were already written.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
     raw_args = list(sys.argv[1:] if argv is None else argv)
     if is_function_call_syntax(raw_args):
         return _run_function_call(raw_args)
 
     parser = build_parser()
-    args = parser.parse_args(_detach_nonnumeric_verbose(raw_args))
+    args = parser.parse_args(_detach_nonnumeric_verbose(_attach_negative_values(raw_args)))
 
     pic_path = args.pic_dir_option or args.pic_path
     if not pic_path:
@@ -145,12 +152,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Digitize a plot image into a CSV (+ overlay). With just an image path it "
             "auto-detects the curve color and the axes (OCR) and saves to your Downloads folder."
         ),
-        epilog=(
+        epilog=for_this_os(
             "Examples:\n"
-            "  python3 digitizer.py plot2.png\n"
-            "  python3 digitizer.py plot2.png --verbose 1\n"
-            "  python3 digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100\n"
-            "  python3 digitizer.py plot2.png --ticks \"[10,200],[500,200],[10,200],[10,20]\" --out ~/Desktop/out\n"
+            "  py digitizer.py plot2.png\n"
+            "  py digitizer.py plot2.png --verbose 1\n"
+            "  py digitizer.py plot2.png --color 255,0,0 --axis 0,10,0,100\n"
+            "  py digitizer.py plot2.png --ticks \"[10,200],[500,200],[10,200],[10,20]\" --out C:\\out\n"
             "A bare filename is also looked up in your Downloads folder."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -262,6 +269,41 @@ def _detach_nonnumeric_verbose(argv: Sequence[str]) -> list[str]:
     return out
 
 
+_NEGATIVE_VALUE_FLAGS = {
+    "--axis-values", "--axis",
+    "--ticks", "--tick-setting", "--tick-coordinates",
+    "--color",
+}
+
+
+def _attach_negative_values(argv: Sequence[str]) -> list[str]:
+    """Join a value that starts with a minus onto its flag as flag=value.
+
+    argparse only recognises "-5" style tokens as values, not "-5,5,0,100", so
+    `--axis -5,5,0,100` failed with "expected one argument" even though negative
+    axis ranges are routine. The `--axis=-5,...` form always worked; make the
+    spaced form equivalent.
+    """
+    out: list[str] = []
+    skip = False
+    for index, token in enumerate(argv):
+        if skip:
+            skip = False
+            continue
+        following = argv[index + 1] if index + 1 < len(argv) else None
+        if (
+            token in _NEGATIVE_VALUE_FLAGS
+            and following is not None
+            and following.startswith("-")
+            and re.fullmatch(r"-[\d.,+\-eE\[\]() ]+", following)
+        ):
+            out.append(f"{token}={following}")
+            skip = True
+        else:
+            out.append(token)
+    return out
+
+
 def _looks_like_verbose_level(token: str) -> bool:
     try:
         int(str(token).strip())
@@ -271,40 +313,40 @@ def _looks_like_verbose_level(token: str) -> bool:
 
 
 def print_function_call_usage() -> None:
-    print(
+    print(for_this_os(
         "\n".join(
             [
                 f"{APP_TITLE} CLI",
                 "",
                 "Use one quoted function-call line:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", output_dir=\"/Users/you/Downloads/testcli\")'",
+                "  py digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
                 "",
                 "Full manual inputs:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"/Users/you/Downloads/testcli\")'",
+                "  py digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", color=(255,0,0), tick_setting=([10,200],[500,200],[10,200],[10,20]), axis_values=(0,10,0,100), output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
                 "",
                 "Blank color, ticks, axis values, or output_dir use auto/default behavior:",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"/Users/you/Pictures/Example 2.png\", , , , output_dir=\"/Users/you/Downloads/testcli\")'",
+                "  py digitizer.py 'digitizer_cli(pic_dir=\"C:\\Users\\User\\Pictures\\Screenshots\\Example 2.png\", , , , output_dir=\"C:\\Users\\User\\Downloads\\testcli\")'",
             ]
         )
-    )
+    ))
 
 
 def print_template() -> None:
     """Print a ready-to-copy digitizer_cli(...) line that users can edit."""
 
-    print(
+    print(for_this_os(
         "\n".join(
             [
                 "Function-call template - copy a line below, then change the values.",
                 "Keep the single quotes around the whole digitizer_cli(...) call.",
                 "",
                 "Minimal (auto-detect the color, OCR the axes, save to Downloads):",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\")'",
+                "  py digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\")'",
                 "",
                 "Full template (every option - delete the parts you don't need):",
-                "  python3 digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\", color=(255,0,0), "
+                "  py digitizer.py 'digitizer_cli(pic_dir=\"plot2.png\", color=(255,0,0), "
                 "axis_values=(0,10,0,100), tick_setting=([10,200],[500,200],[10,200],[10,20]), "
-                "log_x=False, log_y=False, output_dir=\"/Users/you/Downloads/out\", "
+                "log_x=False, log_y=False, output_dir=\"C:/Users/User/Downloads/out\", "
                 "verbose=1, json=False, normalize_y=False, limit_to_calibration=False)'",
                 "",
                 "What each value means:",
@@ -322,7 +364,7 @@ def print_template() -> None:
                 "  limit_to_calibration=True   (optional) drop points outside the calibration box (off by default)",
             ]
         )
-    )
+    ))
 
 
 def is_function_call_syntax(argv: Sequence[str]) -> bool:
@@ -699,7 +741,18 @@ def parse_numbers(value: Optional[str], expected: int, name: str) -> Optional[li
         flattened = _flatten(parsed)
         numbers = [float(item) for item in flattened]
     else:
-        numbers = [float(item) for item in re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", text)]
+        number_re = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+        numbers = [float(item) for item in re.findall(number_re, text)]
+        # A typo like "0,10,0,10O" still yields exactly `expected` numbers ("10O" -> "10"),
+        # silently rescaling every exported value. Refuse any leftover text that is not
+        # pure separators, instead of guessing.
+        residue = re.sub(number_re, "", text)
+        residue = re.sub(r"[\s,;\[\]()]+", "", residue)
+        if residue:
+            raise DigitizerCliError(
+                f"{name} contains unrecognized text {residue!r} in {value!r} - "
+                "expected only numbers and separators."
+            )
 
     if len(numbers) != expected:
         raise DigitizerCliError(f"{name} expects {expected} numeric values, got {len(numbers)}.")
@@ -757,7 +810,7 @@ def _prompt_values() -> Optional[dict[str, object]]:
 
     log_x = _prompt_yes_no("Log scale on the X axis? [y/N]: ", default=False)
     log_y = _prompt_yes_no("Log scale on the Y axis? [y/N]: ", default=False)
-    output_dir = _clean_input(input("Output directory [blank = image folder]: "))
+    output_dir = _clean_input(input("Output directory [blank = Downloads folder]: "))
     normalize_y = _prompt_yes_no("Add normalized Y column? (optional) [y/N]: ", default=False)
     limit_to_calibration = _prompt_yes_no("Limit points to calibration window? (optional) [y/N]: ", default=False)
 
@@ -768,7 +821,7 @@ def _prompt_values() -> Optional[dict[str, object]]:
     print(f"  tick coordinates: {ticks or 'OCR auto'}")
     print(f"  axis values: {axis_values or 'OCR auto'}")
     print(f"  log scale: X={'log' if log_x else 'linear'}, Y={'log' if log_y else 'linear'}")
-    print(f"  output directory: {output_dir or 'image folder'}")
+    print(f"  output directory: {output_dir or 'Downloads folder'}")
     print(f"  normalize y: {'yes' if normalize_y else 'no'}")
     print(f"  limit to calibration: {'yes' if limit_to_calibration else 'no'}")
     print()

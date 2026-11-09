@@ -1,131 +1,93 @@
-# Accuracy Tester (macOS)
+# Accuracy Tester
 
-A standalone desktop tool that compares a digitized CSV against a reference
-("original") CSV and reports accuracy metrics. Independent of the Digitizer app.
+> **On a Mac:** download `AccuracyTester-<version>-macOS-<chip>.zip` from the [macOS releases](https://github.com/RayanA07/digitizer_mac/releases/latest), and use `python3` / Terminal wherever this page says `py` / PowerShell — see the [macOS guide](../Digitizer/README_macOS.md).
 
-There are two ways to use it: the **app** compares two files at a time with plots,
-and the **batch CLI** scores a whole folder in one command. Both use the same
-statistics engine (`accuracy_core.py`), so their numbers agree exactly.
+Compares a digitized CSV against a reference ("original") CSV and reports accuracy
+metrics. Independent of the Digitizer app — you don't need it to get your data out.
 
-## Run the app (no Python needed)
-
-Download `AccuracyTester-macos.app.zip` from the
-[Releases page](https://github.com/RayanA07/digitizer_mac/releases), double-click
-the zip to unpack `AccuracyTester.app`, then double-click the app.
-
-On first launch macOS Gatekeeper may say the app is from an "unidentified
-developer". Right-click (or Control-click) `AccuracyTester.app`, choose **Open**,
-then **Open** again — or allow it under **System Settings → Privacy & Security →
-Open Anyway**.
-
-Then:
-
-1. **Load the ORIGINAL CSV** into the left (blue) panel — click it and pick your
-   reference file (or drag-drop).
-2. **Load the DIGITIZED CSV** into the right (green) panel.
-3. Make sure the **X column** and **Y column** boxes say `x` and `y`.
-4. Click **Process & Compare.** It shows RMSE, correlation, R², bias, MAPE and
-   more, plus plots: curve overlay, residuals, absolute error, and an outlier zoom.
-5. **Export Comparison CSV** saves the aligned point-by-point comparison.
+Two ways to use it: the **desktop app** (two files at a time, with diagnostic plots) and
+the **batch CLI** (a whole folder, scored by file name).
 
 ## Run from source
 
-```bash
-python3 -m pip install -r requirements.txt
-python3 accuracytester_desktop.py
+```powershell
+py -m pip install -r requirements.txt
+py accuracytester_desktop.py
 ```
 
 Load two CSV files (original vs digitized). Drag-and-drop works when `tkinterdnd2`
 is installed; otherwise click the panels to browse for files.
 
-## Score a whole folder (batch accuracy testing)
+## Batch CLI — score a whole folder
 
-```bash
-python3 accuracy_batch_cli.py --digitized-dir ~/Desktop/my_run/digitized_csvs --ground-truth-dir ~/Desktop/truth
+```powershell
+py accuracy_batch_cli.py --digitized-dir "path\to\digitized_csvs" --ground-truth-dir "path\to\truth"
 ```
 
-It pairs files by **filename stem**, so `pilot_09_digitized_points.csv` matches
-`pilot_09.csv` automatically. These suffixes are stripped when matching (longest
-first): `_digitized_points`, `_ground_truth`, `_groundtruth`, `_digitized`,
-`_points`, `_data`, `_gt`. Exact stem matches win; a tie is reported as
-`ambiguous_match` and **never guessed**.
+Writes, next to the digitized CSVs:
 
-**Both CSVs need `x` and `y` column headers.** A bare two-column file with no
-header row will not be read — add `x,y` as the first line, or pass `--x-col` /
-`--y-col` with your real column names.
+- **`accuracy_report\accuracy_report.csv`** — one row per image: RMSE, correlation, MSE,
+  R2, MAE, bias, MAPE/sMAPE/WAPE, `nrmse_range_pct`, point count, plus a `status`.
+- **`accuracy_report\accuracy_summary.json`** — totals and the overall failure rate.
 
-Options:
+Pairs are matched by file-name stem after stripping a `_digitized_points` / `_digitized` /
+`_points` / `_ground_truth` / `_gt` suffix. Exact matches take priority, and a tie between
+several candidates is reported as `ambiguous_match` — never guessed. Every unmatched or
+ignored file is reported rather than silently skipped.
 
-| Option | What it does | Default |
-| --- | --- | --- |
-| `--digitized-dir` | Folder of digitized CSVs. | required |
-| `--ground-truth-dir` | Folder of ground-truth CSVs. | required |
-| `--output-dir` *(`--out`, `-o`)* | Where the report goes. | `<digitized-dir>/accuracy_report` |
-| `--x-col` / `--y-col` | Column names in both CSVs. | `x` / `y` |
-| `--grid-mode` | Which x-values to score on: `original_x`, `digitized_x`, `common_uniform`. | `original_x` |
-| `--grid-points` | Grid size for `common_uniform` (minimum 2). | `1000` |
-| `--dup-policy` | How duplicate x-values collapse: `median`, `mean`, `first`. | `median` |
-| `--color-slot` | Which color slot to use when a CSV holds several series. | first slot in numeric order |
-| `--extra-suffix` | An extra filename suffix to strip when matching (repeatable). | — |
-| `--no-default-suffixes` | Match on exact stems only. | off |
+| Status | Means |
+| --- | --- |
+| `ok` | Pair scored; metrics present. |
+| `no_method_match` | A reference with no digitized file to compare against. |
+| `no_ground_truth_match` | A digitized file whose name matches no reference. |
+| `ambiguous_match` | Several files matched one reference equally well. |
+| `invalid_data` | Can't be scored as y=f(x) — e.g. a vertical line. |
+| `insufficient_overlap` | The curves share too little X range to compare. |
+| `parse_error` | A CSV could not be read at all. |
 
-The defaults mirror the GUI, so batch and app results agree.
+## Reading the numbers honestly
 
-### Output
-
-- **`accuracy_report.csv`** — one row per image: RMSE, correlation, MSE, R², MAE,
-  median/p95/max absolute error, bias, MAPE/sMAPE/WAPE, `nrmse_range_pct`, the
-  overlap range, `points_compared`, and a `status`.
-- **`accuracy_summary.json`** — totals and the overall failure rate.
-
-Two things to know when reading it:
-
-- **`nrmse_range_pct`** (RMSE as a percentage of that figure's own y-range) is the
-  number to quote — it makes figures with wildly different axis scales comparable.
-- **Correlation and R² are undefined against a flat (zero-variance) reference.**
-  The CSV still prints a huge number; read those cells as N/A. The RMSE on the
-  same row is still meaningful.
-
-Statuses: `ok`, `no_method_match` (truth file with nothing digitized matching it),
-`no_ground_truth_match`, `invalid_data` (not scoreable as y=f(x), e.g. a vertical
-line), `ambiguous_match`, `insufficient_overlap`, `parse_error`.
-
-> The summary's **failure rate counts unmatched files**. Scoring 4 CSVs against 16
-> ground truths reports 75% failure — that is a missing-file count, not a
-> statement about accuracy. Read the per-row statuses before quoting it.
-
-Full walkthrough, including the batch digitizer that produces the input folder:
-see [Batch mode](../README.md#batch-mode--whole-folders-at-once) in the main README.
-
-## Build the macOS app
-
-macOS apps must be built on a Mac:
-
-```bash
-bash build_macos.sh
-```
-
-Output: `dist/AccuracyTester.app` (and `dist/AccuracyTester-macos.app.zip`) — a
-windowed app you double-click to open. No Tesseract is needed for this tool.
+- **Quote `nrmse_range_pct`, not raw RMSE.** RMSE carries the units of the Y axis, so it is
+  meaningless across figures with different scales. An RMSE of 63.9 on an axis running to
+  30,000 is *better* than 0.03 on an axis running 0–1.
+- **Correlation and R2 are undefined against a flat reference.** Both divide by the variance
+  of the reference, which is zero for a horizontal line, so the CSV prints a degenerate
+  value like `-2.6e+25`. Read that as **N/A**, not as an accuracy.
+- **A vertical line is not a function of x**, so `invalid_data` is the correct answer rather
+  than a number. This is by design.
 
 ## Tests
 
-```bash
-python3 -m pytest -q
+The tests check the scoring maths against scipy and scikit-learn as independent
+references, so they need a few packages the app itself does not:
+
+```powershell
+py -m pip install -r requirements-dev.txt
+py -m pytest test_accuracy_core.py test_batch_scoring.py -q
 ```
+
+## Build the Windows executable
+
+```powershell
+.\build_windows.ps1
+```
+
+Output: `dist\AccuracyTester.exe` — a windowed, one-file app (double-click to open).
 
 ## Folder contents
 
 ```text
-AccuracyTesterPro.py        # The tool (Tkinter + matplotlib + pandas)
-accuracytester_desktop.py   # Entry point
-accuracy_core.py            # The statistics (RMSE, R2, correlation, ...)
-accuracy_batch_cli.py       # Terminal CLI: score a whole folder
-batch_scoring.py            # File pairing + per-image scoring engine
-accuracytester_macos.spec   # PyInstaller spec (AccuracyTester.app)
-build_macos.sh              # macOS build script
-make_macos_icons.py         # Builds assets/accuracytester.icns from a source image
-requirements.txt            # Python dependencies
-version.json                # App name + version
-assets/                     # Application icon source
+AccuracyTesterPro.py     # The desktop tool (Tkinter + matplotlib + pandas)
+accuracytester_desktop.py# GUI entry point
+accuracy_core.py         # The scoring maths (alignment, metrics)
+batch_scoring.py         # File matching + pair scoring for batch runs
+accuracy_batch_cli.py    # Batch CLI entry point
+test_accuracy_core.py    # Tests for the scoring maths
+test_batch_scoring.py    # Tests for file matching + pair scoring
+requirements-dev.txt     # Test-only deps (pytest, scipy, scikit-learn)
+accuracytester.spec      # PyInstaller spec (AccuracyTester.exe)
+build_windows.ps1        # Build script
+requirements.txt         # Python dependencies
+version.json             # App name + version
+assets/                  # Application icon
 ```

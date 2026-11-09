@@ -1,14 +1,17 @@
 __pycache__/
-*.pyc
 *.py[cod]
-.Python
-.venv/
+*.exe
 build/
 dist/
-release/
 vendor/
+logs/
+.venv/
+.pytest_cache/
+*.egg-info/
+Thumbs.db
+.DS_Store
+
+# macOS build outputs
 *.app
 *.icns
-*.log
-.DS_Store
 smoke_out/

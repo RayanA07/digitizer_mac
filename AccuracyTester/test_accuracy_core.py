@@ -6,7 +6,7 @@ test and asserting it equals itself. Reference-library cross-checks compare
 RMSE / R^2 / correlation / MAE against sklearn and scipy implementations on
 the same synthetic data.
 
-Run:  python3 -m pytest test_accuracy_core.py -v   (from the AccuracyTester folder)
+Run:  py -m pytest test_accuracy_core.py -v   (from the AccuracyTester folder)
 """
 
 import math

@@ -1,45 +1,74 @@
 # Changelog
 
 All notable changes to this project are documented here. Versions follow the release tags
-on GitHub; download the apps from the [Releases page](https://github.com/RayanA07/digitizer_mac/releases/latest).
+on GitHub; download the apps from the [Releases page](https://github.com/RayanA07/LinePilot/releases/latest).
 
-## 2.15.1 (macOS)
-
-macOS-only follow-up to 2.15. No change to the digitizing or scoring maths -- the statistics
-engine is byte-identical to the Windows release and reproduces its numbers exactly.
-
-### Fixed
-
-- **CLI help printed Windows paths.** The original port ran a blind `py` -> `python3` sweep,
-  which left `C:\Users\...` and `C:\charts` examples in `digitizer.py --help`,
-  `digitizer.py template`, `digitizer_batch_cli.py --help` and `accuracy_batch_cli.py --help`,
-  plus a mangled `ready-to-copython3` docstring. All now show macOS paths.
-- **Tesseract was resolved as `tesseract.exe` only.** `AxisReader.py` and `Masking.py` searched
-  for the Windows binary and `C:\Program Files\Tesseract-OCR`, so a source checkout with a
-  vendored macOS Tesseract could not find it, and the error message told Mac users to install an
-  `.exe`. They now look for `vendor/tesseract/tesseract`, Homebrew (`/opt/homebrew`, `/usr/local`)
-  and `/usr/bin`, and the message says `brew install tesseract`.
-- **Enhanced Human Click's menu tooltip** said `Ctrl+Z`; it now shows the platform hint
-  (Command-Z on macOS), matching the settings dialog and the status bar.
-- **Log directory** no longer consults `%LOCALAPPDATA%` before the macOS location.
+## Unreleased
 
 ### Added
 
-- `tools/smoke_test.py` -- end-to-end check: renders charts with known x,y, batch-digitizes the
-  folder, scores it with the batch accuracy CLI, and fails if any figure exceeds 2% NRMSE.
-- `tools/check_help_text.sh` -- fails the build if Windows-only text reappears in CLI help.
-  Errors out rather than passing when the interpreter is missing, so it cannot pass vacuously.
-- CI now runs both unit-test suites, the help-text check and the smoke test on `macos-26`
-  before the apps are built.
+- **DigitizerBench is on Hugging Face:**
+  [huggingface.co/datasets/LinePilot/DigitizerBench](https://huggingface.co/datasets/LinePilot/DigitizerBench).
+  Linked from the README, the project website and the app's *About ▾* menu and About dialog.
+- **macOS app, rebuilt from the current code.** The Mac builds (2.12 – 2.15, as *Data
+  Digitizer*) had been maintained as a separate copy and stopped at 2.15 — they were missing
+  every fix from the 2.15 review and all of 2.16 (largest-ink-run point picking so a legend
+  sample can't drag points, scientific-notation and en-dash axis labels, thick-spine border
+  rejection, log-space `y_norm` in the CLI, locked-file export guard, the About menu, the
+  LinePilot name). The Mac app is now built from the same code as the Windows app.
+  - **Apple Silicon and Intel** builds (`Digitizer-<version>-macOS-AppleSilicon.zip` /
+    `-Intel.zip`); earlier Mac builds were Apple Silicon only.
+  - **OCR on macOS 15:** earlier builds were made on a macOS 26 runner, and the Tesseract
+    they bundle only loads on the macOS it was compiled on or newer — the published 2.15
+    app's OCR needed macOS 26.4+, though nothing told the user. Builds now come from
+    macOS 15, and `Info.plist` records the real minimum (`LSMinimumSystemVersion`), so an
+    older Mac gets a clear message instead of an app whose axis detection fails.
+  - Finder's *Get Info* shows the real version (2.13 / 2.15 builds still said 2.12).
+  - The vendored Tesseract and its libraries are re-signed after `dylibbundler` patches
+    them, since Apple Silicon refuses to launch a binary with a broken signature.
+  - Every release is checked on both chips: the built app must read a real spectrum's axes
+    with its *own* bundled OCR after the runner's Tesseract is uninstalled, and both apps
+    must launch.
+  - User-visible hints say **⌘Z** on a Mac; `--help` / `template` print `python3` and
+    `~/…` paths; logs go to `~/Library/Application Support/DataDigitizer/<version>/logs`.
+  - New **[macOS guide](Digitizer/README_macOS.md)**.
 
-### Documentation
+### Changed
 
-- README rewritten to full parity with the Windows guide: adds the log-scale axes section,
-  `--log-x` / `--log-y`, the build-pipeline table, the Enhanced Human Click walkthrough, and a
-  new **Batch mode** chapter covering batch digitizing and batch accuracy testing end to end.
-- Corrected `--limit-to-calibration`: it is **off** by default (since 2.14), not on. The Windows
-  README still describes the pre-2.14 behaviour.
-- `AccuracyTester/README.md` now documents the batch CLI, its options and its report columns.
+- Everything that differs between Windows, macOS and Linux now lives in
+  `Digitizer/platform_info.py` (Tesseract search paths, the undo-key label, log folder,
+  help-text rewriting). Windows behavior and output are unchanged — help text is returned
+  byte-for-byte on Windows, pinned by `test_platform_info.py`.
+- `digitizer_desktop.py` accepts `LINEPILOT_SELFTEST=<image>` (release-pipeline check: digitize
+  one image with the bundled OCR and exit, no window). Ordinary launches are unaffected.
+
+## 2.16
+
+### Changed
+
+- **Renamed to LinePilot Digitizer**, matching the paper
+  ([arXiv:2609.19377](https://arxiv.org/abs/2609.19377)). Window title, CLI banner and
+  run-log header now read *LinePilot Digitizer 2.16*. Log files stay under
+  `%LOCALAPPDATA%\DataDigitizer\<version>\logs` so existing paths keep working.
+- The project moved to [github.com/RayanA07/LinePilot](https://github.com/RayanA07/LinePilot)
+  with its full history; the website is at https://rayana07.github.io/LinePilot/.
+
+### Added
+
+- **About ▾ menu** in the top-right corner of the window: *About LinePilot*, *Cite this
+  software* (one-click **Copy BibTeX** / plain citation), *Acknowledgments* (NSF POSE award
+  No. 2518273, SpectraGuru team), *Third-party licenses*, and links to the website, paper,
+  source code and issue tracker.
+- GitHub Actions workflow that builds `Digitizer.exe` and `AccuracyTester.exe` on Windows
+  (Tesseract bundled) and attaches them to the release for every `v*` tag.
+- `CITATION.cff`, a screenshot walkthrough in the README, and the project website in `docs/`.
+
+- **License:** the project is now released under the Apache License 2.0 (`LICENSE`); third-party
+  components and what they mean for the executables are listed in `THIRD_PARTY_NOTICES.md`.
+- **Contact:** `Fengbo.Ma@uga.edu` for questions and collaborations (About dialog, website,
+  README); bug reports and feature requests go to GitHub Issues.
+
+Digitization is unchanged from 2.15.
 
 ## 2.15
 

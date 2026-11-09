@@ -49,21 +49,18 @@ That weighting is also what makes the result sub-pixel.
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from typing import Literal, Optional, Tuple
 
 from PyQt6 import QtGui
+
+from platform_info import UNDO_HINT
 
 Kind = Literal["cross", "line-x", "line-y", "none", "rejected"]
 
 # Defaults; the UI exposes search_radius as a slider.
 DEFAULT_SEARCH_RADIUS = 4.0
 DEFAULT_MAX_MOVE = 3.0
-
-# Qt already maps ControlModifier to Command on macOS, so the shortcut itself is correct on
-# both platforms; only the label needs to differ.
-UNDO_HINT = "⌘Z" if sys.platform == "darwin" else "Ctrl+Z"
 
 # A peak must rise this far ABOVE ITS PEDESTAL to count as a stroke, as a fraction of the
 # window diameter. Calibrated against real tick geometry rather than guessed: a 7 px tick in

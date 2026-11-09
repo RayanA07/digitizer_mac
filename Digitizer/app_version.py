@@ -3,7 +3,7 @@
 version.json is already bundled into the exe by digitizer.spec, so read it at runtime
 instead of repeating the number in banners and the log path. Those were hardcoded in six
 places and silently drifted: 2.14 shipped with every string still reading 2.13, including
-the ~/Library/Application Support/DataDigitizer/<version>/logs directory. test_app_version.py fails if
+the %LOCALAPPDATA%\\DataDigitizer\\<version>\\logs directory. test_app_version.py fails if
 version.json and the fallback below ever disagree again.
 """
 
@@ -17,7 +17,7 @@ from typing import Optional, Tuple
 # Used only if version.json is unreadable (a corrupt or partial install). Kept in step with
 # version.json by test_app_version.py.
 _FALLBACK_NAME = "DataDigitizer"
-_FALLBACK_VERSION = "2.15"
+_FALLBACK_VERSION = "2.16"
 
 
 def _version_json_path() -> Optional[Path]:
@@ -50,5 +50,5 @@ def _load() -> Tuple[str, str]:
 
 APP_NAME, APP_VERSION = _load()
 
-# "Data Digitizer 2.14" - the banner every entry point prints.
-APP_TITLE = f"Data Digitizer {APP_VERSION}"
+# e.g. "LinePilot Digitizer 2.16" - the banner every entry point prints.
+APP_TITLE = f"LinePilot Digitizer {APP_VERSION}"
